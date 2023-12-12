@@ -29,15 +29,13 @@
 
     //  clear the screen
        jsr $e544 //.c:670d  20 44 e5   
-
-	jmp main_loop
-stage_loop:    ldx #$00
-//init
 .var road = $2000
 .var csp1 = $2000 + $30*8
 .var csp1origin = $2000 + $ff*8  //the temp char for sp1 from where the csp started
 .var csp1right  = $2000 + $fe*8  //the temp char for sp1 to where will go to the right
-
+	jmp main_loop
+stage_loop:    ldx #$00
+//init
 
 						lda #<road
 						sta load_origin_background_char+1
@@ -203,17 +201,51 @@ csp_load_loop_still_enable:		jmp csp_load_loop
 
 main_loop:
 // main
+	lda #0
+	sta $400 + 4*40 + 2
+	lda #1
+	sta $400 + 4*40 + 3
+	lda #2
+	sta $400 + 3*40 + 3
+	lda #0
+	sta $400 + 3*40 + 4
+	lda #0
+	sta $400 + 3*40 + 5
+	lda #0
+	sta $400 + 3*40 + 6
+	lda #0
+	sta $400 + 3*40 + 7
+	lda #0
+	sta $400 + 3*40 + 7
     lda #$ff
-    sta $0420
+    sta $400 + 3*40 + 8
     lda #$fe
-    sta $0421        
-    lda #$30
-    sta $0410
-
-
+    sta $400 + 3*40 + 9
+	// house
+	lda #$24
+    sta $400 + 3*40 + 10
+	lda #$25
+    sta $400 + 3*40 + 11
+	lda #$14
+    sta $400 + 2*40 + 10
+	lda #$15
+    sta $400 + 2*40 + 11
+	//mine
+	lda #$26
+    sta $400 + 3*40 + 12
+	lda #$27
+    sta $400 + 3*40 + 13
+	lda #$16
+    sta $400 + 2*40 + 12
+	lda #$17
+    sta $400 + 2*40 + 13
+    
+			lda #0
+			sta stage_data
 			jmp stage_loop
+
 end:		rts
-stage_data: .byte $05
+stage_data: .byte $04
 
 	// character bitmap definitions 2k
 *=$2000
