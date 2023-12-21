@@ -37,7 +37,6 @@
 	jmp load_map
 stage_loop:    ldx #$00
 //init
-			//			inc stage_data
 						lda stage_direction
 						sta $fb
 						lda #<road
@@ -63,82 +62,101 @@ stage_loop:    ldx #$00
 
 csp_load_loop:			lda csp1 
 						tay //y=the data of the csp1,x
-						lda stage_data
+//stage 0 origin						
+stage0_origin:			lda stage_data
 						cmp #0
 						bne stage1_origin
-
-//stage 0 origin
-						lda $fb
-						cmp #1 //right
+						lda $fb  
+						cmp #2 //right
 						bne stage_origin_to_left0
 stage_origin_to_right0:	tya
-						// inc stage_data
-						jmp move_temps
-stage_origin_to_left0:	cmp #2
+						jmp draw_origin
+stage_origin_to_left0:	cmp #1
 						bne stage1_origin
 						tya
-						jmp move_temps
+						jmp draw_origin
+
 //stage 1 origin
-stage1_origin:			tya
+stage1_origin:			lda stage_data
 						cmp #1
 						bne stage2_origin
 						lda $fb
-						cmp #1
+						cmp #2
 						bne stage_origin_to_left1
 stage_origin_to_right1: tya
 						lsr
-						jmp move_temps
-stage_origin_to_left1:	cmp #2
-						jmp move_temps						
+						jmp draw_origin
+stage_origin_to_left1:	cmp #1
+						bne stage2_origin
+						tya
+						asl
+						jmp draw_origin						
 
 //stage 2 origin
-stage2_origin:			cmp #2
+stage2_origin:			lda stage_data
+						cmp #2
 						bne stage3_origin
 						lda $fb
-						cmp #1
+						cmp #2
 						bne stage_origin_to_left2
 stage_origin_to_right2: tya
 						lsr
 						lsr
-						jmp move_temps
-stage_origin_to_left2:	cmp #2
-						jmp move_temps	
-
-
+						jmp draw_origin
+stage_origin_to_left2:	cmp #1
+						bne stage3_origin
+						tya
+						asl
+						asl
+						jmp draw_origin	
 
 //stage 3 origin
-stage3_origin:			cmp #3
+stage3_origin:			lda stage_data
+						cmp #3
 						bne stage4_origin
 						lda $fb
-						cmp #1
+						cmp #2
 						bne stage_origin_to_left3
 stage_origin_to_right3: tya
 						lsr
 						lsr
 						lsr
-						jmp move_temps
-stage_origin_to_left3:	cmp #2
-						jmp move_temps	
+						jmp draw_origin
+stage_origin_to_left3:	cmp #1
+						bne stage4_origin
+						tya
+						asl
+						asl
+						asl
+						jmp draw_origin	
 
 
-stage4_origin:			cmp #4
+stage4_origin:			lda stage_data
+						cmp #4
 						bne stage5_origin
 						lda $fb
-						cmp #1
+						cmp #2
 						bne stage_origin_to_left4
 stage_origin_to_right4: tya
 						lsr
 						lsr
 						lsr
 						lsr
-						jmp move_temps
-stage_origin_to_left4:	cmp #2
-						jmp move_temps	
-
-stage5_origin:			cmp #5
+						jmp draw_origin
+stage_origin_to_left4:	cmp #1
+						bne stage4_origin
+						tya
+						asl
+						asl
+						asl
+						asl
+						jmp draw_origin	
+//stage 5 origin
+stage5_origin:			lda stage_data
+						cmp #5
 						bne stage6_origin
 						lda $fb
-						cmp #1
+						cmp #2
 						bne stage_origin_to_left5
 stage_origin_to_right5: tya
 						lsr
@@ -146,14 +164,22 @@ stage_origin_to_right5: tya
 						lsr
 						lsr
 						lsr
-						jmp move_temps
-stage_origin_to_left5:	cmp #2
-						jmp move_temps	
-
-stage6_origin:			cmp #6
+						jmp draw_origin
+stage_origin_to_left5:	cmp #1
+						bne stage6_origin
+						tya
+						asl
+						asl
+						asl
+						asl
+						asl
+						jmp draw_origin	
+//stage 6 origin
+stage6_origin:			lda stage_data
+						cmp #6
 						bne stage7_origin
 						lda $fb
-						cmp #1
+						cmp #2
 						bne stage_origin_to_left6
 stage_origin_to_right6: tya
 						lsr
@@ -162,15 +188,24 @@ stage_origin_to_right6: tya
 						lsr
 						lsr
 						lsr
-						jmp move_temps
-stage_origin_to_left6:	cmp #2
-						jmp move_temps	
+						jmp draw_origin
+stage_origin_to_left6:	cmp #1
+						bne stage7_origin
+						tya
+						asl
+						asl
+						asl
+						asl
+						asl
+						asl
+						jmp draw_origin	
 
-stage7_origin:			cmp #7
-						bne move_temps
+stage7_origin:			lda stage_data
+						cmp #7
+						bne draw_origin
 						lda $fb
-						cmp #1
-						bne move_temps
+						cmp #2
+						bne draw_origin
 stage_origin_to_right7: tya
 						lsr
 						lsr
@@ -179,74 +214,199 @@ stage_origin_to_right7: tya
 						lsr
 						lsr
 						lsr
-						jmp move_temps
-stage_origin_to_left7:	cmp #2
-						jmp move_temps			
-move_temps:
+						jmp draw_origin
+stage_origin_to_left7:	cmp #1
+						bne draw_origin
+						tya
+						ror
+						asl
+						asl
+						asl
+						asl
+						asl
+						asl
+						jmp draw_origin			
+draw_origin:
 // at this point a=the csp data rotated right stage_data times, x=0-7, y= original csp1
 load_origin_background_char:	ora road
 store_to_origin_temp:			sta csp1origin
+
+move_temps:					
 						lda stage_data
 						cmp #0
-						bne stage_right_to_right1
-stage_right_to_right0:			
+						bne stage_temps1
+stage_temps0:			lda $fb
+						cmp #2
+						bne stage_temps0_left
+stage_temps0_right:     lda #0
 						jmp load_right_background_char
-stage_right_to_right1:			cmp #1
-						bne stage_right_to_right2
-						tya 
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
+stage_temps0_left:		cmp #1
+						bne stage_temps1
+						lda #0
 						jmp load_right_background_char
-stage_right_to_right2:			cmp #2
-						bne stage_right_to_right3
-						tya
+
+stage_temps1:
+						lda stage_data
+						cmp #1
+						bne stage_temps2
+						lda $fb
+						cmp #2
+						bne stage_temps1_left
+stage_temps1_right:     tya 
 						asl
 						asl
-						asl
-						asl
-						asl
-						asl
-						jmp load_right_background_char
-stage_right_to_right3:			cmp #3
-						bne stage_right_to_right4
-						tya
 						asl
 						asl
 						asl
 						asl
 						asl
 						jmp load_right_background_char
-stage_right_to_right4:			cmp #4
-						bne stage_right_to_right5
+stage_temps1_left:		cmp #1
+						bne stage_temps2
 						tya
+						lsr
+						lsr
+						lsr
+						lsr
+						lsr
+						lsr
+						lsr
+						
+						jmp load_right_background_char
+ 
+
+stage_temps2:
+						lda stage_data
+						cmp #2
+						bne stage_temps3
+						lda $fb
+						cmp #2
+						bne stage_temps2_left
+stage_temps2_right:     tya 
+						asl
+						asl
 						asl
 						asl
 						asl
 						asl
 						jmp load_right_background_char
-stage_right_to_right5:			cmp #5
-						bne stage_right_to_right6
+stage_temps2_left:		cmp #1
+						bne stage_temps3
+
 						tya
+						lsr
+						lsr
+						lsr
+						lsr
+						lsr
+						lsr
+						
+						jmp load_right_background_char
+
+
+stage_temps3:
+						lda stage_data
+						cmp #3
+						bne stage_temps4
+						lda $fb
+						cmp #2
+						bne stage_temps3_left
+stage_temps3_right:     tya 
 						asl
 						asl
 						asl
-						jmp load_right_background_char			
-stage_right_to_right6:			cmp #6
-						bne stage_right_to_right7
-						tya
 						asl
 						asl
 						jmp load_right_background_char
-stage_right_to_right7:			cmp #7
-						bne goto_main
+stage_temps3_left:		cmp #1
+						bne stage_temps4
 						tya
+						lsr
+						lsr
+						lsr
+						lsr
+						lsr
+						
+
+						jmp load_right_background_char
+
+stage_temps4:
+						lda stage_data
+						cmp #4
+						bne stage_temps5
+						lda $fb
+						cmp #2
+						bne stage_temps4_left
+stage_temps4_right:     tya 
 						asl
-						jmp load_right_background_char	
+						asl
+						asl
+						asl
+						jmp load_right_background_char
+stage_temps4_left:		cmp #1
+						bne stage_temps5
+						tya
+						lsr
+						lsr
+						lsr
+						lsr		
+						jmp load_right_background_char
+
+stage_temps5:
+						lda stage_data
+						cmp #5
+						bne stage_temps6
+						lda $fb
+						cmp #2
+						bne stage_temps5_left
+stage_temps5_right:     tya 
+						asl
+						asl
+						asl
+						jmp load_right_background_char
+stage_temps5_left:		cmp #1
+						bne stage_temps6
+						tya
+						lsr 
+						lsr
+						lsr
+						jmp load_right_background_char
+
+
+stage_temps6:
+						lda stage_data
+						cmp #6
+						bne stage_temps7
+						lda $fb
+						cmp #2
+						bne stage_temps6_left
+stage_temps6_right:     tya 
+						asl
+						asl
+						jmp load_right_background_char
+stage_temps6_left:		cmp #1
+						bne stage_temps7
+						tya
+						lsr
+						lsr
+						jmp load_right_background_char
+stage_temps7:
+						lda stage_data
+						cmp #7
+						bne load_right_background_char
+						lda $fb
+						cmp #2
+						bne stage_temps7_left
+stage_temps7_right:     tya 
+						asl
+						jmp load_right_background_char
+stage_temps7_left:		cmp #1
+						bne load_right_background_char
+						tya
+						lsr
+						jmp load_right_background_char
+
+
 load_right_background_char:	ora road
 store_to_right_temp:	sta csp1right
 
@@ -260,10 +420,11 @@ store_to_right_temp:	sta csp1right
     cpx #8
 	bne csp_load_loop_still_enable
 goto_main:    		ldx #8
+		//			inc stage_data 
 					jmp main_logic
 csp_load_loop_still_enable:		jmp csp_load_loop
 stage_data: .byte $00
-stage_direction: .byte $02 //right
+stage_direction: .byte $01 //right
 
 
 
@@ -271,10 +432,11 @@ stage_direction: .byte $02 //right
 main_logic:
 	
 			lda stage_data
-			cmp #5
+			cmp #8
 			beq end      
 main:		cpx #8   //stage_loop finished
 			beq next_stage
+			
 			lda stage_data
 			cmp #0
 			bne main_1
@@ -301,16 +463,40 @@ main_3:
 			jmp stage_loop
 main_4:		
 			cmp #4
-			bne next_stage
+			bne main_5
 			lda #$73
 			sta $400
 			jmp stage_loop
+
+main_5:		
+			cmp #5
+			bne main_6
+			lda #$74
+			sta $400
+			jmp stage_loop
+
+main_6:		
+			cmp #6
+			bne main_7
+			lda #$75
+			sta $400
+			jmp stage_loop
+
+main_7:		
+			cmp #7
+			bne next_stage
+			lda #$76
+			sta $400
+			jmp stage_loop
+
+
+
 
 next_stage:
 			waitkey:
 			jsr $FFE4
 			beq waitkey 
-			inc stage_data
+ 			inc stage_data
 			jmp main_logic
 
 
@@ -333,10 +519,11 @@ load_map:
 	sta $400 + 3*40 + 7
 	lda #0
 	sta $400 + 3*40 + 7
+
     lda #$ff
     sta $400 + 3*40 + 8
     lda #$fe
-    sta $400 + 3*40 + 9
+    sta $400 + 3*40 + 7
 	// house
 	lda #$24
     sta $400 + 3*40 + 10
