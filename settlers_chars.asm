@@ -16,7 +16,7 @@
 	sta $d018
 
 	// set border color
-	lda #$06
+	lda #$00
 	sta $d020
 
 	// set background color
@@ -205,7 +205,7 @@ stage7_origin:			lda stage_data
 						bne draw_origin
 						lda $fb
 						cmp #2
-						bne draw_origin
+						bne stage_origin_to_left7
 stage_origin_to_right7: tya
 						lsr
 						lsr
@@ -218,7 +218,7 @@ stage_origin_to_right7: tya
 stage_origin_to_left7:	cmp #1
 						bne draw_origin
 						tya
-						ror
+						asl
 						asl
 						asl
 						asl
@@ -424,7 +424,7 @@ goto_main:    		ldx #8
 					jmp main_logic
 csp_load_loop_still_enable:		jmp csp_load_loop
 stage_data: .byte $00
-stage_direction: .byte $01 //right
+stage_direction: .byte $02 //right
 
 
 
@@ -441,7 +441,7 @@ main:		cpx #8   //stage_loop finished
 			cmp #0
 			bne main_1
 main_0:		lda #$79
-			sta $400	
+	//		sta $400	
 			jmp stage_loop
 main_1:		
 			cmp #1
@@ -519,11 +519,11 @@ load_map:
 	sta $400 + 3*40 + 7
 	lda #0
 	sta $400 + 3*40 + 7
-
+// temp chars
     lda #$ff
     sta $400 + 3*40 + 8
     lda #$fe
-    sta $400 + 3*40 + 7
+    sta $400 + 3*40 + 9
 	// house
 	lda #$24
     sta $400 + 3*40 + 10
@@ -542,7 +542,140 @@ load_map:
     sta $400 + 2*40 + 12
 	lda #$17
     sta $400 + 2*40 + 13
+	
+// 	ldx #0
+// test_draw_line:
+// 	stx set_x+1
+// 	stx set_y+1
+// 	jsr convertxy	
+// 	inx
+// 	cpx #24
+// 	bne test_draw_line
+
+ldx #0
+loop:
+	stx set_x+1
+	lda #0
+	sta set_y+1
+	lda #$30
+	sta set_char+1
+	jsr convertxy	
+	inx
+	cpx #40
+	bne loop
+
+ldx #0
+loop1:
+	lda #0
+	sta set_x+1
+	lda #1
+	sta set_char+1
+	stx set_y+1
+	jsr convertxy	
+	inx
+	cpx #25
+	bne loop1
+
+ldx #0
+loop2:
+	ldy #39
+	sty set_x+1
+	stx set_y+1
+	jsr convertxy	
+	inx
+	cpx #25
+	bne loop2
+
+
 	jmp main_logic
 	// character bitmap definitions 2k
 *=$2000
 .import source "chars.asm"
+
+*=3000
+
+convertxy:
+sta convertxy_backupa
+stx convertxy_backupx
+sty convertxy_backupy
+clc
+set_x: ldx #$ff
+set_y: ldy #$ff
+lda x_data,y
+stx add_x+1
+add_x: adc #0
+sta screen+1
+lda y_data,y
+sta screen+2
+bcc no_carry
+inc screen+2
+no_carry:
+set_char: lda #$70
+screen: sta $ffff
+lda convertxy_backupa
+ldx convertxy_backupx
+ldy convertxy_backupy
+
+rts
+convertxy_backupa: .byte 00
+convertxy_backupx: .byte 00
+convertxy_backupy: .byte 00
+
+// *=$2000
+x_data: 
+.byte 1024+40*0 //00
+.byte 1024+40*1 //28
+.byte 1024+40*2 //50
+.byte 1024+40*3 //78
+.byte 1024+40*4 //a0
+.byte 1024+40*5 //c8
+.byte 1024+40*6 //d0
+.byte 1024+40*7 //18*
+.byte 1024+40*8 //40
+.byte 1024+40*9 //68
+
+.byte 1024+40*10 //90
+.byte 1024+40*11 //b8
+.byte 1024+40*12 //e0
+.byte 1024+40*13 //08*
+.byte 1024+40*14 //30
+.byte 1024+40*15 //58
+.byte 1024+40*16 //80
+.byte 1024+40*17 //a8
+.byte 1024+40*18 //d0
+.byte 1024+40*19 //f8
+
+.byte 1024+40*20 //20*
+.byte 1024+40*21 //48
+.byte 1024+40*22 //70
+.byte 1024+40*23 //98
+.byte 1024+40*24 //c0
+
+y_data:
+.byte $04
+.byte $04
+.byte $04
+.byte $04
+.byte $04
+.byte $04
+.byte $04
+.byte $05
+.byte $05
+.byte $05
+
+.byte $05
+.byte $05
+.byte $05
+.byte $06
+.byte $06
+.byte $06
+.byte $06
+.byte $06
+.byte $06
+.byte $06
+
+.byte $07
+.byte $07
+.byte $07
+.byte $07
+.byte $07
