@@ -503,125 +503,74 @@ next_stage:
 end:		rts
 
 load_map:
-	lda #0
-	sta $400 + 4*40 + 2
-	lda #1
-	sta $400 + 4*40 + 3
-	lda #2
-	sta $400 + 3*40 + 3
-	lda #0
-	sta $400 + 3*40 + 4
-	lda #0
-	sta $400 + 3*40 + 5
-	lda #0
-	sta $400 + 3*40 + 6
-	lda #0
-	sta $400 + 3*40 + 7
-	lda #0
-	sta $400 + 3*40 + 7
-// temp chars
-    lda #$ff
-    sta $400 + 3*40 + 8
-    lda #$fe
-    sta $400 + 3*40 + 9
-	// house
-	lda #$24
-    sta $400 + 3*40 + 10
-	lda #$25
-    sta $400 + 3*40 + 11
-	lda #$14
-    sta $400 + 2*40 + 10
-	lda #$15
-    sta $400 + 2*40 + 11
-	//mine
-	lda #$26
-    sta $400 + 3*40 + 12
-	lda #$27
-    sta $400 + 3*40 + 13
-	lda #$16
-    sta $400 + 2*40 + 12
-	lda #$17
-    sta $400 + 2*40 + 13
 	
-// 	ldx #0
-// test_draw_line:
-// 	stx set_x+1
-// 	stx set_y+1
-// 	jsr convertxy	
-// 	inx
-// 	cpx #24
-// 	bne test_draw_line
-
-ldx #0
-loop:
-	stx set_x+1
-	lda #0
-	sta set_y+1
-	lda #$30
-	sta set_char+1
-	jsr convertxy	
+	ldx #0
+	line1:
+	lda map1,x
+	sta $400,x
 	inx
-	cpx #40
-	bne loop
+	cpx #0
+	bne line1
 
-ldx #0
-loop1:
-	lda #0
-	sta set_x+1
-	lda #1
-	sta set_char+1
-	stx set_y+1
-	jsr convertxy	
+	ldx #0
+	line2:
+	lda map1+$100,x
+	sta $500,x
 	inx
-	cpx #25
-	bne loop1
+	cpx #0
+	bne line2
 
-ldx #0
-loop2:
-	ldy #39
-	sty set_x+1
-	stx set_y+1
-	jsr convertxy	
+	ldx #0
+	line3:
+	lda map1+$200,x
+	sta $600,x
 	inx
-	cpx #25
-	bne loop2
+	cpx #0
+	bne line3
+
+	ldx #0
+	line4:
+	lda map1+$300,x
+	sta $700,x
+	inx
+	cpx #0
+	bne line4
+
+    lda #$ff
+    sta $400 + 2*40 + 8
+    lda #$fe
+    sta $400 + 2*40 + 9
 
 
 	jmp main_logic
-	// character bitmap definitions 2k
-*=$2000
-.import source "chars.asm"
 
-*=3000
-
+// get the x and y in set_x+1 and set_y+1 and load set_char
 convertxy:
-sta convertxy_backupa
-stx convertxy_backupx
-sty convertxy_backupy
-clc
-set_x: ldx #$ff
-set_y: ldy #$ff
-lda x_data,y
-stx add_x+1
-add_x: adc #0
-sta screen+1
-lda y_data,y
-sta screen+2
-bcc no_carry
-inc screen+2
+		sta convertxy_backupa
+		stx convertxy_backupx
+		sty convertxy_backupy
+			clc
+set_x: 		ldx #$ff
+set_y: 		ldy #$ff
+			lda x_data,y
+			stx add_x+1
+add_x: 		adc #0
+			sta screen+1
+			lda y_data,y
+			sta screen+2
+			bcc no_carry
+			inc screen+2
 no_carry:
-set_char: lda #$70
-screen: sta $ffff
-lda convertxy_backupa
-ldx convertxy_backupx
-ldy convertxy_backupy
-
+			set_char: lda #$70
+screen: 	sta $ffff
+		lda convertxy_backupa
+		ldx convertxy_backupx
+		ldy convertxy_backupy
 rts
 convertxy_backupa: .byte 00
 convertxy_backupx: .byte 00
 convertxy_backupy: .byte 00
 
-// *=$2000
 x_data: 
 .byte 1024+40*0 //00
 .byte 1024+40*1 //28
@@ -679,3 +628,14 @@ y_data:
 .byte $07
 .byte $07
 .byte $07
+
+
+	// character bitmap definitions 2k
+*=$2000
+.import source "chars.asm"
+
+*=$4000
+map1:
+.import source "map1.asm"
+
+
