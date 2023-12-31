@@ -3,6 +3,20 @@
 	.byte $0b, $08, $0a, $00, $9e, $32, $30, $36, $31, $00, $00, $00
 
 *=$080d
+	jmp start
+
+	// this sub is allocating a temp char
+	// jsr getTempChar
+	//     lda tempCharID
+	//     sta $400
+	//     lda tempCharLow
+	//     sta testChar+1
+	//     lda tempCharHigh
+	//     sta testChar+2
+	//     lda #$ff
+	// testChar: sta $ffff
+	.import source "getTempChar.asm"
+start:
 	// set to 25 line text mode and turn on the screen
 	lda #$1b
 	sta $d011
@@ -541,7 +555,17 @@ load_map:
     lda #$fe
     sta $400 + 2*40 + 9
 
-
+// testing the getTempChar
+	jsr getTempChar
+    lda tempCharID
+    sta $401
+    lda tempCharLow
+    sta testChar+1
+    lda tempCharHigh
+    sta testChar+2
+    lda #$ff
+testChar: sta $ffff
+    
 	jmp main_logic
 
 // get the x and y in set_x+1 and set_y+1 and load set_char
