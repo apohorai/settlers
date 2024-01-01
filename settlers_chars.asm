@@ -15,7 +15,9 @@
 	//     sta testChar+2
 	//     lda #$ff
 	// testChar: sta $ffff
-	.import source "getTempChar.asm"
+ 
+	//.import source "getTempChar.asm"
+	//.import source "copyChar.asm"
 start:
 	// set to 25 line text mode and turn on the screen
 	lda #$1b
@@ -49,472 +51,544 @@ start:
 .var csp1right  = $2000 + $fe*8  //the temp char for sp1 to where will go to the right
 
 	jmp load_map
-stage_loop:    ldx #$00
+// cspdata
+csp_x:
+.byte 30
+csp_y:
+.byte 4
+csp_direction:
+.byte 2
+csp_origin:
+csp_left:
+csp_right:
+csp_stage:
+.byte 0
+
+// testing the getTempChar
+	// jsr getTempChar
+    // lda tempCharID
+    // sta $401
+    // lda tempCharLow
+    // sta testChar+1
+    // lda tempCharHigh
+    // sta testChar+2
+    // lda #$ff
+	// testChar: sta $ffff
+
+// this loop loads the data for the csp loads the chars
+cspStageLoop:  			ldx #$00
 //init
-						lda stage_direction
+						lda csp_direction
 						sta $fb
-						lda #<road
-						sta load_origin_background_char+1
-						lda #>road
-						sta load_origin_background_char+2
-						lda #<road
-						sta load_right_background_char+1
-						lda #>road
-						sta load_right_background_char+2
-						lda #<csp1
-						sta csp_load_loop+1
-						lda #>csp1
-						sta csp_load_loop+2
-						lda #<csp1origin
-						sta store_to_origin_temp+1
-						lda #>csp1origin
-						sta store_to_origin_temp+2
-						lda #<csp1right
-						sta store_to_right_temp+1
-						lda #>csp1right
-						sta store_to_right_temp+2
 
-csp_load_loop:			lda csp1 
-						tay //y=the data of the csp1,x
-//stage 0 origin						
-stage0_origin:			lda stage_data
-						cmp #0
-						bne stage1_origin
-						lda $fb  
-						cmp #2 //right
-						bne stage_origin_to_left0
-stage_origin_to_right0:	tya
-						jmp draw_origin
-stage_origin_to_left0:	cmp #1
-						bne stage1_origin
-						tya
-						jmp draw_origin
-
-//stage 1 origin
-stage1_origin:			lda stage_data
-						cmp #1
-						bne stage2_origin
-						lda $fb
-						cmp #2
-						bne stage_origin_to_left1
-stage_origin_to_right1: tya
-						lsr
-						jmp draw_origin
-stage_origin_to_left1:	cmp #1
-						bne stage2_origin
-						tya
-						asl
-						jmp draw_origin						
-
-//stage 2 origin
-stage2_origin:			lda stage_data
-						cmp #2
-						bne stage3_origin
-						lda $fb
-						cmp #2
-						bne stage_origin_to_left2
-stage_origin_to_right2: tya
-						lsr
-						lsr
-						jmp draw_origin
-stage_origin_to_left2:	cmp #1
-						bne stage3_origin
-						tya
-						asl
-						asl
-						jmp draw_origin	
-
-//stage 3 origin
-stage3_origin:			lda stage_data
-						cmp #3
-						bne stage4_origin
-						lda $fb
-						cmp #2
-						bne stage_origin_to_left3
-stage_origin_to_right3: tya
-						lsr
-						lsr
-						lsr
-						jmp draw_origin
-stage_origin_to_left3:	cmp #1
-						bne stage4_origin
-						tya
-						asl
-						asl
-						asl
-						jmp draw_origin	
-
-
-stage4_origin:			lda stage_data
-						cmp #4
-						bne stage5_origin
-						lda $fb
-						cmp #2
-						bne stage_origin_to_left4
-stage_origin_to_right4: tya
-						lsr
-						lsr
-						lsr
-						lsr
-						jmp draw_origin
-stage_origin_to_left4:	cmp #1
-						bne stage4_origin
-						tya
-						asl
-						asl
-						asl
-						asl
-						jmp draw_origin	
-//stage 5 origin
-stage5_origin:			lda stage_data
-						cmp #5
-						bne stage6_origin
-						lda $fb
-						cmp #2
-						bne stage_origin_to_left5
-stage_origin_to_right5: tya
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						jmp draw_origin
-stage_origin_to_left5:	cmp #1
-						bne stage6_origin
-						tya
-						asl
-						asl
-						asl
-						asl
-						asl
-						jmp draw_origin	
-//stage 6 origin
-stage6_origin:			lda stage_data
-						cmp #6
-						bne stage7_origin
-						lda $fb
-						cmp #2
-						bne stage_origin_to_left6
-stage_origin_to_right6: tya
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						jmp draw_origin
-stage_origin_to_left6:	cmp #1
-						bne stage7_origin
-						tya
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
-						jmp draw_origin	
-
-stage7_origin:			lda stage_data
-						cmp #7
-						bne draw_origin
-						lda $fb
-						cmp #2
-						bne stage_origin_to_left7
-stage_origin_to_right7: tya
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						jmp draw_origin
-stage_origin_to_left7:	cmp #1
-						bne draw_origin
-						tya
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
-						jmp draw_origin			
-draw_origin:
-// at this point a=the csp data rotated right stage_data times, x=0-7, y= original csp1
-load_origin_background_char:	ora road
-store_to_origin_temp:			sta csp1origin
-
-move_temps:					
-						lda stage_data
-						cmp #0
-						bne stage_temps1
-stage_temps0:			lda $fb
-						cmp #2
-						bne stage_temps0_left
-stage_temps0_right:     lda #0
-						jmp load_right_background_char
-stage_temps0_left:		cmp #1
-						bne stage_temps1
+						// for test, draw a path
+						lda csp_x
+						sta set_x+1
+						lda csp_y
+						sta set_y+1
 						lda #0
-						jmp load_right_background_char
-
-stage_temps1:
-						lda stage_data
-						cmp #1
-						bne stage_temps2
-						lda $fb
-						cmp #2
-						bne stage_temps1_left
-stage_temps1_right:     tya 
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
-						jmp load_right_background_char
-stage_temps1_left:		cmp #1
-						bne stage_temps2
-						tya
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
+						sta set_char+1
+						jsr setXYonScreen
 						
-						jmp load_right_background_char
- 
+						jsr getTempChar
+						// lda tempCharLow
+						// lda tempCharHigh
 
-stage_temps2:
-						lda stage_data
-						cmp #2
-						bne stage_temps3
-						lda $fb
-						cmp #2
-						bne stage_temps2_left
-stage_temps2_right:     tya 
-						asl
-						asl
-						asl
-						asl
-						asl
-						asl
-						jmp load_right_background_char
-stage_temps2_left:		cmp #1
-						bne stage_temps3
+// get the original character in the csp position
+						lda csp_x
+						sta get_x+1
+						lda csp_y
+						sta get_y+1
+						jsr getXYonScreen
+						sta theOriginalChar
 
-						tya
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
+// copy the original to the tempCharLow/High address
+copyChar:				jmp copyTheOriginalChar
+							copyTheOriginalCharBackupX:
+							.byte 0
+							copyTheOriginalCharBackupY:
+							.byte 0
+							theOriginalChar:
+							.byte 0
+	copyTheOriginalChar:    stx copyTheOriginalCharBackupX
+							sty copyTheOriginalCharBackupY
 						
-						jmp load_right_background_char
+							ldx theOriginalChar 
+							lda default_charset_low_map,x
+							sta copy+1
+							lda default_charset_high_map,x
+							sta copy+2
 
+							ldx tempCharID
+							lda default_charset_low_map,x
+							sta paste+1
+							lda default_charset_high_map,x
+							sta paste+2
+							ldy #0
+	copyLoop:				
+	copy:					lda $ffff,y
+	paste:					sta $ffff,y
+							iny
+							cpy #8
+							bne copyLoop
+							ldx copyTheOriginalCharBackupX
+							ldy copyTheOriginalCharBackupY
+                        
+cspInit:						
+						// for test, draw the copied char
+						lda #32
+						sta set_x+1
+						lda csp_y
+						sta set_y+1
+						lda tempCharID
+						sta set_char+1
+						jsr setXYonScreen
 
-stage_temps3:
-						lda stage_data
-						cmp #3
-						bne stage_temps4
-						lda $fb
-						cmp #2
-						bne stage_temps3_left
-stage_temps3_right:     tya 
-						asl
-						asl
-						asl
-						asl
-						asl
-						jmp load_right_background_char
-stage_temps3_left:		cmp #1
-						bne stage_temps4
-						tya
-						lsr
-						lsr
-						lsr
-						lsr
-						lsr
+						// the background char of the origin what will be merged with the settler
+						lda #<road
+						sta mergeSettlerWithOrigin+1
+						lda #>road
+						sta mergeSettlerWithOrigin+2
 						
+						// the background char of the target what will be merged with the settler
+						lda #<road
+						sta mergeSettlerWithTarget+1
+						lda #>road
+						sta mergeSettlerWithTarget+2
+						
+						//the bitmap address of the settler
+						lda #<csp1
+						sta charStageLoop+1
+						lda #>csp1
+						sta charStageLoop+2
+						
+						// storeToOriginTemp = the temp char assigned to the staging Origin
+						lda #<csp1origin
+						sta storeToOriginTemp+1
+						lda #>csp1origin
+						sta storeToOriginTemp+2
 
-						jmp load_right_background_char
+						// storeToTargetTemp = the temp char assigned to the staging Target
+						lda #<csp1right
+						sta storeToTargetTemp+1
+						lda #>csp1right
+						sta storeToTargetTemp+2
 
-stage_temps4:
-						lda stage_data
-						cmp #4
-						bne stage_temps5
-						lda $fb
-						cmp #2
-						bne stage_temps4_left
-stage_temps4_right:     tya 
-						asl
-						asl
-						asl
-						asl
-						jmp load_right_background_char
-stage_temps4_left:		cmp #1
-						bne stage_temps5
-						tya
-						lsr
-						lsr
-						lsr
-						lsr		
-						jmp load_right_background_char
+charStageLoop:			lda csp1 // load the settler bitmap line - I setup this value during the init phase and inc after a stage finished
+						tay //y=the bitmap line number (0-7)	
+charStageOrigin:				
+	stageOrigin0:				lda stage_data
+								cmp #0
+								bne stageOrigin1
+								lda $fb  
+								cmp #2 //right
+								bne stageOrigin0Left
+		stageOrigin0Right:		tya
+							jmp drawOrigin
+		stageOrigin0Left:		cmp #1
+								bne stageOrigin1
+								tya
+							jmp drawOrigin
+	stageOrigin1:				lda stage_data
+								cmp #1
+								bne stageOrigin2
+								lda $fb
+								cmp #2
+								bne stageOrigin1Left
+		stageOrigin1Right:		tya
+								lsr
+							jmp drawOrigin
+		stageOrigin1Left:		cmp #1
+								bne stageOrigin2
+								tya
+								asl
+							jmp drawOrigin						
+	stageOrigin2:				lda stage_data
+								cmp #2
+								bne stageOrigin3
+								lda $fb
+								cmp #2
+								bne stageOrigin2Left
+		stageOrigin2Right:		tya
+								lsr
+								lsr
+							jmp drawOrigin
+		stageOrigin2Left:		cmp #1
+								bne stageOrigin3
+								tya
+								asl
+								asl
+							jmp drawOrigin	
+	stageOrigin3:				lda stage_data
+								cmp #3
+								bne stageOrigin4
+								lda $fb
+								cmp #2
+								bne stageOrigin3Left
+		stageOrigin3Right:		tya
+								lsr
+								lsr
+								lsr
+							jmp drawOrigin
+		stageOrigin3Left:		cmp #1
+								bne stageOrigin4
+								tya
+								asl
+								asl
+								asl
+								jmp drawOrigin	
+	stageOrigin4:				lda stage_data
+								cmp #4
+								bne stageOrigin5
+								lda $fb
+								cmp #2
+								bne stageOrigin4Left
+		stageOrigin4Right:		tya
+								lsr
+								lsr
+								lsr
+								lsr
+							jmp drawOrigin
+		stageOrigin4Left:		cmp #1
+								bne stageOrigin5
+								tya
+								asl
+								asl
+								asl
+								asl
+							jmp drawOrigin	
+	stageOrigin5:				lda stage_data
+								cmp #5
+								bne stageOrigin6
+								lda $fb
+								cmp #2
+								bne stageOrigin5Left
+		stageOrigin5Right:		tya
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+							jmp drawOrigin
+		stageOrigin5Left:		cmp #1
+								bne stageOrigin6
+								tya
+								asl
+								asl
+								asl
+								asl
+								asl
+							jmp drawOrigin	
+	stageOrigin6:				lda stage_data
+								cmp #6
+								bne stageOrigin7
+								lda $fb
+								cmp #2
+								bne stageOrigin6Left
+		stageOrigin6Right:		tya
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+							jmp drawOrigin
+		stageOrigin6Left:		cmp #1
+								bne stageOrigin7
+								tya
+								asl
+								asl
+								asl
+								asl
+								asl
+								asl
+							jmp drawOrigin	
+	stageOrigin7:				lda stage_data
+								cmp #7
+								bne drawOrigin
+								lda $fb
+								cmp #2
+								bne stageOrigin7Left
+		stageOrigin7Right:		tya
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+							jmp drawOrigin
+		stageOrigin7Left:		cmp #1
+								bne drawOrigin
+								tya
+								asl
+								asl
+								asl
+								asl
+								asl
+								asl
+								asl
+						jmp drawOrigin			
+drawOrigin:
+	// at this point a=the csp data rotated right stage_data times, x=0-7, y= original csp1
+mergeSettlerWithOrigin:		ora road
+storeToOriginTemp:			sta csp1origin
 
-stage_temps5:
-						lda stage_data
-						cmp #5
-						bne stage_temps6
-						lda $fb
-						cmp #2
-						bne stage_temps5_left
-stage_temps5_right:     tya 
-						asl
-						asl
-						asl
-						jmp load_right_background_char
-stage_temps5_left:		cmp #1
-						bne stage_temps6
-						tya
-						lsr 
-						lsr
-						lsr
-						jmp load_right_background_char
+charStageTarget:					
+								lda stage_data
+								cmp #0
+								bne stageTarget1
+	stageTarget0:				lda $fb
+								cmp #2
+								bne stageTarget0Left
+		stageTarget0Right:    	lda #0
+							jmp mergeSettlerWithTarget
+		stageTarget0Left:		cmp #1
+								bne stageTarget1
+								lda #0
+							jmp mergeSettlerWithTarget
+	stageTarget1:
+								lda stage_data
+								cmp #1
+								bne stageTarget2
+								lda $fb
+								cmp #2
+								bne stageTarget1Left
+		stageTarget1Right:		tya 
+								asl
+								asl
+								asl
+								asl
+								asl
+								asl
+								asl
+							jmp mergeSettlerWithTarget
+		stageTarget1Left:		cmp #1
+								bne stageTarget2
+								tya
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr	
+							jmp mergeSettlerWithTarget
+	stageTarget2:
+								lda stage_data
+								cmp #2
+								bne stageTarget3
+								lda $fb
+								cmp #2
+								bne stageTarget2Left
+		stageTarget2Right:	    tya 
+								asl
+								asl
+								asl
+								asl
+								asl
+								asl
+							jmp mergeSettlerWithTarget
+		stageTarget2Left:		cmp #1
+								bne stageTarget3
+								tya
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+							jmp mergeSettlerWithTarget
+	stageTarget3:
+								lda stage_data
+								cmp #3
+								bne stageTarget4
+								lda $fb
+								cmp #2
+								bne stageTarget3Left
+		stageTarget3Right:  	tya 
+								asl
+								asl
+								asl
+								asl
+								asl
+							jmp mergeSettlerWithTarget
+		stageTarget3Left:		cmp #1
+								bne stageTarget4
+								tya
+								lsr
+								lsr
+								lsr
+								lsr
+								lsr
+							jmp mergeSettlerWithTarget
+	stageTarget4:
+								lda stage_data
+								cmp #4
+								bne stageTarget5
+								lda $fb
+								cmp #2
+								bne stageTarget4Left
+		stageTarget4Right:	 	tya 
+								asl
+								asl
+								asl
+								asl
+							jmp mergeSettlerWithTarget
+		stageTarget4Left:		cmp #1
+								bne stageTarget5
+								tya
+								lsr
+								lsr
+								lsr
+								lsr		
+							jmp mergeSettlerWithTarget
+	stageTarget5:
+								lda stage_data
+								cmp #5
+								bne stageTarget6
+								lda $fb
+								cmp #2
+								bne stageTarget5Left
+		stageTarget5Right:  	tya 
+								asl
+								asl
+								asl
+							jmp mergeSettlerWithTarget
+		stageTarget5Left:		cmp #1
+								bne stageTarget6
+								tya
+								lsr 
+								lsr
+								lsr
+							jmp mergeSettlerWithTarget
+	stageTarget6:
+								lda stage_data
+								cmp #6
+								bne stageTarget7
+								lda $fb
+								cmp #2
+								bne stageTarget6Left
+		stageTarget6Right:  	tya 
+								asl
+								asl
+							jmp mergeSettlerWithTarget
+		stageTarget6Left:		cmp #1
+								bne stageTarget7
+								tya
+								lsr
+								lsr
+							jmp mergeSettlerWithTarget
+	stageTarget7:
+								lda stage_data
+								cmp #7
+								bne mergeSettlerWithTarget
+								lda $fb
+								cmp #2
+								bne stageTarget7Left
+		stageTarget7Right:  	tya 
+								asl
+								jmp mergeSettlerWithTarget
+		stageTarget7Left:		cmp #1
+								bne mergeSettlerWithTarget
+								tya
+								lsr
+							jmp mergeSettlerWithTarget
+drawTarget:
+mergeSettlerWithTarget:	ora road
+storeToTargetTemp:		sta csp1right
 
+    				inc mergeSettlerWithOrigin+1
+					inc mergeSettlerWithTarget+1
+    				inc charStageLoop+1
+    				inc storeToOriginTemp+1
+					inc storeToTargetTemp+1
 
-stage_temps6:
-						lda stage_data
-						cmp #6
-						bne stage_temps7
-						lda $fb
-						cmp #2
-						bne stage_temps6_left
-stage_temps6_right:     tya 
-						asl
-						asl
-						jmp load_right_background_char
-stage_temps6_left:		cmp #1
-						bne stage_temps7
-						tya
-						lsr
-						lsr
-						jmp load_right_background_char
-stage_temps7:
-						lda stage_data
-						cmp #7
-						bne load_right_background_char
-						lda $fb
-						cmp #2
-						bne stage_temps7_left
-stage_temps7_right:     tya 
-						asl
-						jmp load_right_background_char
-stage_temps7_left:		cmp #1
-						bne load_right_background_char
-						tya
-						lsr
-						jmp load_right_background_char
-
-
-load_right_background_char:	ora road
-store_to_right_temp:	sta csp1right
-
-    				inc load_origin_background_char+1
-					inc load_right_background_char+1
-    				inc csp_load_loop+1
-    				inc store_to_origin_temp+1
-					inc store_to_right_temp+1
-
-    inx
-    cpx #8
-	bne csp_load_loop_still_enable
-goto_main:    		ldx #8
-		//			inc stage_data 
-					jmp main_logic
-csp_load_loop_still_enable:		jmp csp_load_loop
+    				inx
+    				cpx #8
+					bne charStagingInProgress
+goto_main:    		ldx #8    //char staging finished, all 8 bitmap lines are processed
+					jmp mainLogic
+charStagingInProgress:	jmp charStageLoop 
 stage_data: .byte $00
 stage_direction: .byte $02 //right
 
 
-
-
-main_logic:
-	
+mainLogic:
 			lda stage_data
 			cmp #8
-			beq end      
-main:		cpx #8   //stage_loop finished
-			beq next_stage
+			beq end   
+			// csp became idle   
+cspStageCheck:		cpx #8   //char stage loop finished, all bitmap lines are generated - x used for the charloop
+			beq nextStage
 			
 			lda stage_data
 			cmp #0
-			bne main_1
-main_0:		lda #$79
-	//		sta $400	
-			jmp stage_loop
-main_1:		
+			bne cspStage1
+cspStage0:	lda #$79
+			sta $400	
+			jmp cspStageLoop
+cspStage1:		
 			cmp #1
-			bne main_2
+			bne cspStage2
 			lda #$70
 			sta $400
-			jmp stage_loop
-main_2:		
+			jmp cspStageLoop
+cspStage2:		
 			cmp #2
-			bne main_3
+			bne cspStage3
 			lda #$71
 			sta $400
-			jmp stage_loop
-main_3:		
+			jmp cspStageLoop
+cspStage3:		
 			cmp #3
-			bne main_4
+			bne cspStage4
 			lda #$72
 			sta $400
-			jmp stage_loop
-main_4:		
+			jmp cspStageLoop
+cspStage4:		
 			cmp #4
-			bne main_5
+			bne cspStage5
 			lda #$73
 			sta $400
-			jmp stage_loop
+			jmp cspStageLoop
 
-main_5:		
+cspStage5:		
 			cmp #5
-			bne main_6
+			bne cspStage6
 			lda #$74
 			sta $400
-			jmp stage_loop
+			jmp cspStageLoop
 
-main_6:		
+cspStage6:		
 			cmp #6
-			bne main_7
+			bne cspStage7
 			lda #$75
 			sta $400
-			jmp stage_loop
+			jmp cspStageLoop
 
-main_7:		
+cspStage7:		
 			cmp #7
-			bne next_stage
+			bne nextStage
 			lda #$76
 			sta $400
-			jmp stage_loop
+			jmp cspStageLoop
 
 
 
 
-next_stage:
+nextStage:
 			waitkey:
 			jsr $FFE4
 			beq waitkey 
  			inc stage_data
-			jmp main_logic
+			jmp mainLogic
 
 
-end:		rts
+end:		lda #0
+			sta stage_data
+			jmp mainLogic
+			rts
 
 load_map:
 	
@@ -555,21 +629,12 @@ load_map:
     lda #$fe
     sta $400 + 2*40 + 9
 
-// testing the getTempChar
-	jsr getTempChar
-    lda tempCharID
-    sta $401
-    lda tempCharLow
-    sta testChar+1
-    lda tempCharHigh
-    sta testChar+2
-    lda #$ff
-testChar: sta $ffff
+
     
-	jmp main_logic
+	jmp mainLogic
 
 // get the x and y in set_x+1 and set_y+1 and load set_char
-convertxy:
+setXYonScreen:
 		sta convertxy_backupa
 		stx convertxy_backupx
 		sty convertxy_backupy
@@ -591,6 +656,31 @@ screen: 	sta $ffff
 		ldx convertxy_backupx
 		ldy convertxy_backupy
 rts
+
+getXYonScreen:
+
+		stx convertxy_backupx
+		sty convertxy_backupy
+			clc
+get_x: 		ldx #$ff
+get_y: 		ldy #$ff
+			lda x_data,y
+			stx add_x2+1
+add_x2: 		adc #0
+			sta screen2+1
+			lda y_data,y
+			sta screen2+2
+			bcc no_carry2
+			inc screen2+2
+no_carry2:
+	//		set_char: lda #$70
+screen2: 	lda $ffff
+
+		ldx convertxy_backupx
+		ldy convertxy_backupy
+rts
+
+
 convertxy_backupa: .byte 00
 convertxy_backupx: .byte 00
 convertxy_backupy: .byte 00
@@ -653,6 +743,631 @@ y_data:
 .byte $07
 .byte $07
 
+
+// jsr getTempChar
+//     lda tempCharID
+//     sta $400
+//     lda tempCharLow
+//     sta testChar+1
+//     lda tempCharHigh
+//     sta testChar+2
+//     lda #$ff
+    
+// testChar: sta $ffff
+// rts
+
+
+
+// *=$2000
+// .fill 2048, 0    
+
+
+//////////////////////
+getTempChar:
+    sta getTempChar_store_a
+    stx getTempChar_store_x
+
+    ldx #100
+getcharloop:    
+    lda tempCharBuffer,x
+    cmp #0
+    beq emptycharfound
+    inx
+    jmp getcharloop
+
+emptycharfound:
+    stx tempCharID
+    lda #1
+    sta tempCharBuffer,x
+    lda default_charset_low_map,x
+    sta tempCharLow
+    lda default_charset_high_map,x
+    sta tempCharHigh
+
+    lda getTempChar_store_a
+    ldx getTempChar_store_x
+    rts
+getTempChar_store_a:
+.byte 0
+getTempChar_store_x:
+.byte 0
+tempCharID:
+.byte 0
+tempCharLow:
+.byte 0
+tempCharHigh:
+.byte 0
+tempCharBuffer:
+.fill 255, 0    
+
+
+default_charset_low_map:
+.var default_charset = $2000
+.byte <default_charset+8*0
+.byte <default_charset+8*1
+.byte <default_charset+8*2
+.byte <default_charset+8*3
+.byte <default_charset+8*4
+.byte <default_charset+8*5
+.byte <default_charset+8*6
+.byte <default_charset+8*7
+.byte <default_charset+8*8
+.byte <default_charset+8*9
+
+.byte <default_charset+8*10
+.byte <default_charset+8*11
+.byte <default_charset+8*12
+.byte <default_charset+8*13
+.byte <default_charset+8*14
+.byte <default_charset+8*15
+.byte <default_charset+8*16
+.byte <default_charset+8*17
+.byte <default_charset+8*18
+.byte <default_charset+8*19
+
+.byte <default_charset+8*20
+.byte <default_charset+8*21
+.byte <default_charset+8*22
+.byte <default_charset+8*23
+.byte <default_charset+8*24
+.byte <default_charset+8*25
+.byte <default_charset+8*26
+.byte <default_charset+8*27
+.byte <default_charset+8*28
+.byte <default_charset+8*29
+
+.byte <default_charset+8*30
+.byte <default_charset+8*31
+.byte <default_charset+8*32
+.byte <default_charset+8*33
+.byte <default_charset+8*34
+.byte <default_charset+8*35
+.byte <default_charset+8*36
+.byte <default_charset+8*37
+.byte <default_charset+8*38
+.byte <default_charset+8*39
+
+.byte <default_charset+8*40
+.byte <default_charset+8*41
+.byte <default_charset+8*42
+.byte <default_charset+8*43
+.byte <default_charset+8*44
+.byte <default_charset+8*45
+.byte <default_charset+8*46
+.byte <default_charset+8*47
+.byte <default_charset+8*48
+.byte <default_charset+8*49
+
+.byte <default_charset+8*50
+.byte <default_charset+8*51
+.byte <default_charset+8*52
+.byte <default_charset+8*53
+.byte <default_charset+8*54
+.byte <default_charset+8*55
+.byte <default_charset+8*56
+.byte <default_charset+8*57
+.byte <default_charset+8*58
+.byte <default_charset+8*59
+
+.byte <default_charset+8*60
+.byte <default_charset+8*61
+.byte <default_charset+8*62
+.byte <default_charset+8*63
+.byte <default_charset+8*64
+.byte <default_charset+8*65
+.byte <default_charset+8*66
+.byte <default_charset+8*67
+.byte <default_charset+8*68
+.byte <default_charset+8*69
+
+.byte <default_charset+8*70
+.byte <default_charset+8*71
+.byte <default_charset+8*72
+.byte <default_charset+8*73
+.byte <default_charset+8*74
+.byte <default_charset+8*75
+.byte <default_charset+8*76
+.byte <default_charset+8*77
+.byte <default_charset+8*78
+.byte <default_charset+8*79
+
+.byte <default_charset+8*80
+.byte <default_charset+8*81
+.byte <default_charset+8*82
+.byte <default_charset+8*83
+.byte <default_charset+8*84
+.byte <default_charset+8*85
+.byte <default_charset+8*86
+.byte <default_charset+8*87
+.byte <default_charset+8*88
+.byte <default_charset+8*89
+
+.byte <default_charset+8*90
+.byte <default_charset+8*91
+.byte <default_charset+8*92
+.byte <default_charset+8*93
+.byte <default_charset+8*94
+.byte <default_charset+8*95
+.byte <default_charset+8*96
+.byte <default_charset+8*97
+.byte <default_charset+8*98
+.byte <default_charset+8*99
+
+.byte <default_charset+8*100
+.byte <default_charset+8*101
+.byte <default_charset+8*102
+.byte <default_charset+8*103
+.byte <default_charset+8*104
+.byte <default_charset+8*105
+.byte <default_charset+8*106
+.byte <default_charset+8*107
+.byte <default_charset+8*108
+.byte <default_charset+8*109
+
+.byte <default_charset+8*110
+.byte <default_charset+8*111
+.byte <default_charset+8*112
+.byte <default_charset+8*113
+.byte <default_charset+8*114
+.byte <default_charset+8*115
+.byte <default_charset+8*116
+.byte <default_charset+8*117
+.byte <default_charset+8*118
+.byte <default_charset+8*119
+
+.byte <default_charset+8*120
+.byte <default_charset+8*121
+.byte <default_charset+8*122
+.byte <default_charset+8*123
+.byte <default_charset+8*124
+.byte <default_charset+8*125
+.byte <default_charset+8*126
+.byte <default_charset+8*127
+.byte <default_charset+8*128
+.byte <default_charset+8*129
+
+.byte <default_charset+8*130
+.byte <default_charset+8*131
+.byte <default_charset+8*132
+.byte <default_charset+8*133
+.byte <default_charset+8*134
+.byte <default_charset+8*135
+.byte <default_charset+8*136
+.byte <default_charset+8*137
+.byte <default_charset+8*138
+.byte <default_charset+8*139
+
+.byte <default_charset+8*140
+.byte <default_charset+8*141
+.byte <default_charset+8*142
+.byte <default_charset+8*143
+.byte <default_charset+8*144
+.byte <default_charset+8*145
+.byte <default_charset+8*146
+.byte <default_charset+8*147
+.byte <default_charset+8*148
+.byte <default_charset+8*149
+
+.byte <default_charset+8*150
+.byte <default_charset+8*151
+.byte <default_charset+8*152
+.byte <default_charset+8*153
+.byte <default_charset+8*154
+.byte <default_charset+8*155
+.byte <default_charset+8*156
+.byte <default_charset+8*157
+.byte <default_charset+8*158
+.byte <default_charset+8*159
+
+.byte <default_charset+8*160
+.byte <default_charset+8*161
+.byte <default_charset+8*162
+.byte <default_charset+8*163
+.byte <default_charset+8*164
+.byte <default_charset+8*165
+.byte <default_charset+8*166
+.byte <default_charset+8*167
+.byte <default_charset+8*168
+.byte <default_charset+8*169
+
+.byte <default_charset+8*170
+.byte <default_charset+8*171
+.byte <default_charset+8*172
+.byte <default_charset+8*173
+.byte <default_charset+8*174
+.byte <default_charset+8*175
+.byte <default_charset+8*176
+.byte <default_charset+8*177
+.byte <default_charset+8*178
+.byte <default_charset+8*179
+
+.byte <default_charset+8*180
+.byte <default_charset+8*181
+.byte <default_charset+8*182
+.byte <default_charset+8*183
+.byte <default_charset+8*184
+.byte <default_charset+8*185
+.byte <default_charset+8*186
+.byte <default_charset+8*187
+.byte <default_charset+8*188
+.byte <default_charset+8*189
+
+.byte <default_charset+8*190
+.byte <default_charset+8*191
+.byte <default_charset+8*192
+.byte <default_charset+8*193
+.byte <default_charset+8*194
+.byte <default_charset+8*195
+.byte <default_charset+8*196
+.byte <default_charset+8*197
+.byte <default_charset+8*198
+.byte <default_charset+8*199
+
+.byte <default_charset+8*200
+.byte <default_charset+8*201
+.byte <default_charset+8*202
+.byte <default_charset+8*203
+.byte <default_charset+8*204
+.byte <default_charset+8*205
+.byte <default_charset+8*206
+.byte <default_charset+8*207
+.byte <default_charset+8*208
+.byte <default_charset+8*209
+
+.byte <default_charset+8*210
+.byte <default_charset+8*211
+.byte <default_charset+8*212
+.byte <default_charset+8*213
+.byte <default_charset+8*214
+.byte <default_charset+8*215
+.byte <default_charset+8*216
+.byte <default_charset+8*217
+.byte <default_charset+8*218
+.byte <default_charset+8*219
+
+.byte <default_charset+8*220
+.byte <default_charset+8*221
+.byte <default_charset+8*222
+.byte <default_charset+8*223
+.byte <default_charset+8*224
+.byte <default_charset+8*225
+.byte <default_charset+8*226
+.byte <default_charset+8*227
+.byte <default_charset+8*228
+.byte <default_charset+8*229
+
+.byte <default_charset+8*230
+.byte <default_charset+8*231
+.byte <default_charset+8*232
+.byte <default_charset+8*233
+.byte <default_charset+8*234
+.byte <default_charset+8*235
+.byte <default_charset+8*236
+.byte <default_charset+8*237
+.byte <default_charset+8*238
+.byte <default_charset+8*239
+
+.byte <default_charset+8*240
+.byte <default_charset+8*241
+.byte <default_charset+8*242
+.byte <default_charset+8*243
+.byte <default_charset+8*244
+.byte <default_charset+8*245
+.byte <default_charset+8*246
+.byte <default_charset+8*247
+.byte <default_charset+8*248
+.byte <default_charset+8*249
+
+.byte <default_charset+8*250
+.byte <default_charset+8*251
+.byte <default_charset+8*252
+.byte <default_charset+8*253
+.byte <default_charset+8*254
+.byte <default_charset+8*255
+
+//highbytes
+default_charset_high_map:
+.byte >default_charset+8*0
+.byte >default_charset+8*1
+.byte >default_charset+8*2
+.byte >default_charset+8*3
+.byte >default_charset+8*4
+.byte >default_charset+8*5
+.byte >default_charset+8*6
+.byte >default_charset+8*7
+.byte >default_charset+8*8
+.byte >default_charset+8*9
+
+.byte >default_charset+8*10
+.byte >default_charset+8*11
+.byte >default_charset+8*12
+.byte >default_charset+8*13
+.byte >default_charset+8*14
+.byte >default_charset+8*15
+.byte >default_charset+8*16
+.byte >default_charset+8*17
+.byte >default_charset+8*18
+.byte >default_charset+8*19
+
+.byte >default_charset+8*20
+.byte >default_charset+8*21
+.byte >default_charset+8*22
+.byte >default_charset+8*23
+.byte >default_charset+8*24
+.byte >default_charset+8*25
+.byte >default_charset+8*26
+.byte >default_charset+8*27
+.byte >default_charset+8*28
+.byte >default_charset+8*29
+
+.byte >default_charset+8*30
+.byte >default_charset+8*31
+.byte >default_charset+8*32
+.byte >default_charset+8*33
+.byte >default_charset+8*34
+.byte >default_charset+8*35
+.byte >default_charset+8*36
+.byte >default_charset+8*37
+.byte >default_charset+8*38
+.byte >default_charset+8*39
+
+.byte >default_charset+8*40
+.byte >default_charset+8*41
+.byte >default_charset+8*42
+.byte >default_charset+8*43
+.byte >default_charset+8*44
+.byte >default_charset+8*45
+.byte >default_charset+8*46
+.byte >default_charset+8*47
+.byte >default_charset+8*48
+.byte >default_charset+8*49
+
+.byte >default_charset+8*50
+.byte >default_charset+8*51
+.byte >default_charset+8*52
+.byte >default_charset+8*53
+.byte >default_charset+8*54
+.byte >default_charset+8*55
+.byte >default_charset+8*56
+.byte >default_charset+8*57
+.byte >default_charset+8*58
+.byte >default_charset+8*59
+
+.byte >default_charset+8*60
+.byte >default_charset+8*61
+.byte >default_charset+8*62
+.byte >default_charset+8*63
+.byte >default_charset+8*64
+.byte >default_charset+8*65
+.byte >default_charset+8*66
+.byte >default_charset+8*67
+.byte >default_charset+8*68
+.byte >default_charset+8*69
+
+.byte >default_charset+8*70
+.byte >default_charset+8*71
+.byte >default_charset+8*72
+.byte >default_charset+8*73
+.byte >default_charset+8*74
+.byte >default_charset+8*75
+.byte >default_charset+8*76
+.byte >default_charset+8*77
+.byte >default_charset+8*78
+.byte >default_charset+8*79
+
+.byte >default_charset+8*80
+.byte >default_charset+8*81
+.byte >default_charset+8*82
+.byte >default_charset+8*83
+.byte >default_charset+8*84
+.byte >default_charset+8*85
+.byte >default_charset+8*86
+.byte >default_charset+8*87
+.byte >default_charset+8*88
+.byte >default_charset+8*89
+
+.byte >default_charset+8*90
+.byte >default_charset+8*91
+.byte >default_charset+8*92
+.byte >default_charset+8*93
+.byte >default_charset+8*94
+.byte >default_charset+8*95
+.byte >default_charset+8*96
+.byte >default_charset+8*97
+.byte >default_charset+8*98
+.byte >default_charset+8*99
+
+.byte >default_charset+8*100
+.byte >default_charset+8*101
+.byte >default_charset+8*102
+.byte >default_charset+8*103
+.byte >default_charset+8*104
+.byte >default_charset+8*105
+.byte >default_charset+8*106
+.byte >default_charset+8*107
+.byte >default_charset+8*108
+.byte >default_charset+8*109
+
+.byte >default_charset+8*110
+.byte >default_charset+8*111
+.byte >default_charset+8*112
+.byte >default_charset+8*113
+.byte >default_charset+8*114
+.byte >default_charset+8*115
+.byte >default_charset+8*116
+.byte >default_charset+8*117
+.byte >default_charset+8*118
+.byte >default_charset+8*119
+
+.byte >default_charset+8*120
+.byte >default_charset+8*121
+.byte >default_charset+8*122
+.byte >default_charset+8*123
+.byte >default_charset+8*124
+.byte >default_charset+8*125
+.byte >default_charset+8*126
+.byte >default_charset+8*127
+.byte >default_charset+8*128
+.byte >default_charset+8*129
+
+.byte >default_charset+8*130
+.byte >default_charset+8*131
+.byte >default_charset+8*132
+.byte >default_charset+8*133
+.byte >default_charset+8*134
+.byte >default_charset+8*135
+.byte >default_charset+8*136
+.byte >default_charset+8*137
+.byte >default_charset+8*138
+.byte >default_charset+8*139
+
+.byte >default_charset+8*140
+.byte >default_charset+8*141
+.byte >default_charset+8*142
+.byte >default_charset+8*143
+.byte >default_charset+8*144
+.byte >default_charset+8*145
+.byte >default_charset+8*146
+.byte >default_charset+8*147
+.byte >default_charset+8*148
+.byte >default_charset+8*149
+
+.byte >default_charset+8*150
+.byte >default_charset+8*151
+.byte >default_charset+8*152
+.byte >default_charset+8*153
+.byte >default_charset+8*154
+.byte >default_charset+8*155
+.byte >default_charset+8*156
+.byte >default_charset+8*157
+.byte >default_charset+8*158
+.byte >default_charset+8*159
+
+.byte >default_charset+8*160
+.byte >default_charset+8*161
+.byte >default_charset+8*162
+.byte >default_charset+8*163
+.byte >default_charset+8*164
+.byte >default_charset+8*165
+.byte >default_charset+8*166
+.byte >default_charset+8*167
+.byte >default_charset+8*168
+.byte >default_charset+8*169
+
+.byte >default_charset+8*170
+.byte >default_charset+8*171
+.byte >default_charset+8*172
+.byte >default_charset+8*173
+.byte >default_charset+8*174
+.byte >default_charset+8*175
+.byte >default_charset+8*176
+.byte >default_charset+8*177
+.byte >default_charset+8*178
+.byte >default_charset+8*179
+
+.byte >default_charset+8*180
+.byte >default_charset+8*181
+.byte >default_charset+8*182
+.byte >default_charset+8*183
+.byte >default_charset+8*184
+.byte >default_charset+8*185
+.byte >default_charset+8*186
+.byte >default_charset+8*187
+.byte >default_charset+8*188
+.byte >default_charset+8*189
+
+.byte >default_charset+8*190
+.byte >default_charset+8*191
+.byte >default_charset+8*192
+.byte >default_charset+8*193
+.byte >default_charset+8*194
+.byte >default_charset+8*195
+.byte >default_charset+8*196
+.byte >default_charset+8*197
+.byte >default_charset+8*198
+.byte >default_charset+8*199
+
+.byte >default_charset+8*200
+.byte >default_charset+8*201
+.byte >default_charset+8*202
+.byte >default_charset+8*203
+.byte >default_charset+8*204
+.byte >default_charset+8*205
+.byte >default_charset+8*206
+.byte >default_charset+8*207
+.byte >default_charset+8*208
+.byte >default_charset+8*209
+
+.byte >default_charset+8*210
+.byte >default_charset+8*211
+.byte >default_charset+8*212
+.byte >default_charset+8*213
+.byte >default_charset+8*214
+.byte >default_charset+8*215
+.byte >default_charset+8*216
+.byte >default_charset+8*217
+.byte >default_charset+8*218
+.byte >default_charset+8*219
+
+.byte >default_charset+8*220
+.byte >default_charset+8*221
+.byte >default_charset+8*222
+.byte >default_charset+8*223
+.byte >default_charset+8*224
+.byte >default_charset+8*225
+.byte >default_charset+8*226
+.byte >default_charset+8*227
+.byte >default_charset+8*228
+.byte >default_charset+8*229
+
+.byte >default_charset+8*230
+.byte >default_charset+8*231
+.byte >default_charset+8*232
+.byte >default_charset+8*233
+.byte >default_charset+8*234
+.byte >default_charset+8*235
+.byte >default_charset+8*236
+.byte >default_charset+8*237
+.byte >default_charset+8*238
+.byte >default_charset+8*239
+
+.byte >default_charset+8*240
+.byte >default_charset+8*241
+.byte >default_charset+8*242
+.byte >default_charset+8*243
+.byte >default_charset+8*244
+.byte >default_charset+8*245
+.byte >default_charset+8*246
+.byte >default_charset+8*247
+.byte >default_charset+8*248
+.byte >default_charset+8*249
+
+.byte >default_charset+8*250
+.byte >default_charset+8*251
+.byte >default_charset+8*252
+.byte >default_charset+8*253
+.byte >default_charset+8*254
+.byte >default_charset+8*255
 
 	// character bitmap definitions 2k
 *=$2000
