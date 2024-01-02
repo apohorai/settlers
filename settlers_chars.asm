@@ -4,20 +4,6 @@
 
 *=$080d
 	jmp start
-
-	// this sub is allocating a temp char
-	// jsr getTempChar
-	//     lda tempCharID
-	//     sta $400
-	//     lda tempCharLow
-	//     sta testChar+1
-	//     lda tempCharHigh
-	//     sta testChar+2
-	//     lda #$ff
-	// testChar: sta $ffff
- 
-	//.import source "getTempChar.asm"
-	//.import source "copyChar.asm"
 start:
 	// set to 25 line text mode and turn on the screen
 	lda #$1b
@@ -44,7 +30,7 @@ start:
 	sta $0286
 
     //  clear the screen
-       jsr $e544 //.c:670d  20 44 e5   
+    jsr $e544 //.c:670d  20 44 e5   
 .var road = $2000
 .var csp1 = $2000 + $30*8
 .var csp1origin = $2000 + $ff*8  //the temp char for sp1 from where the csp started
@@ -114,11 +100,11 @@ cspInit:
 
 						// for test, draw a path
 						lda cspX
-						sta set_x+1
+						sta setX+1
 						lda cspY
-						sta set_y+1
+						sta setY+1
 						lda #0
-						sta set_char+1
+						sta setChar+1
 						jsr setXYonScreen
 						
 	//					jsr getTempChar
@@ -127,9 +113,9 @@ cspInit:
 
 						// get the original character in the csp position
 						lda cspX
-						sta get_x+1
+						sta getX+1
 						lda cspY
-						sta get_y+1
+						sta getY+1
 						jsr getXYonScreen
 						sta theOriginalChar
 
@@ -137,11 +123,11 @@ cspInit:
 					
 						// for test, draw the copied char
 						lda #32
-						sta set_x+1
+						sta setX+1
 						lda cspY
-						sta set_y+1
+						sta setY+1
 						lda tempCharID
-						sta set_char+1
+						sta setChar+1
 						jsr setXYonScreen
 
 						// the background char of the origin what will be merged with the settler
@@ -598,17 +584,12 @@ end:		lda #0
 delay:
 			ldx #0
      		lda #10
-wait: 		cmp $d012
+		wait: 		cmp $d012
      		bne wait
      		inx
      		cpx #30
      		bne wait   
-rts
-
-
-
-
-
+			rts
 
 load_map:
 	
@@ -655,55 +636,49 @@ load_map:
 
 // get the x and y in set_x+1 and set_y+1 and load set_char
 setXYonScreen:
-		sta convertxy_backupa
-		stx convertxy_backupx
-		sty convertxy_backupy
+		stx setXYonScreenBackupX
+		sty setXYonScreenBackupY
 			clc
-set_x: 		ldx #$ff
-set_y: 		ldy #$ff
+	setX: 
+	 		ldx #$ff
+	setY: 		ldy #$ff
+			lda x_data,y
+			stx addX+1
+	addX: 		adc #0
+			sta setXYonScreenAdress+1
+			lda y_data,y
+			sta setXYonScreenAdress+2
+			bcc no_carry
+			inc setXYonScreenAdress+2
+	no_carry:
+		setChar: lda #$70
+	setXYonScreenAdress: 	sta $ffff
+		ldx setXYonScreenBackupX
+		ldy setXYonScreenBackupY
+		rts
+	setXYonScreenBackupX: .byte 00
+	setXYonScreenBackupY: .byte 00
+getXYonScreen:
+		stx getXYonScreenBackupX
+		sty getXYonScreenBackupY
+			clc
+		getX: 		ldx #$ff
+		getY: 		ldy #$ff
 			lda x_data,y
 			stx add_x+1
-add_x: 		adc #0
-			sta screen+1
+		add_x: 		adc #0
+			sta getXYonScreenAdress+1
 			lda y_data,y
-			sta screen+2
-			bcc no_carry
-			inc screen+2
-no_carry:
-			set_char: lda #$70
-screen: 	sta $ffff
-		lda convertxy_backupa
-		ldx convertxy_backupx
-		ldy convertxy_backupy
-rts
-
-getXYonScreen:
-
-		stx convertxy_backupx
-		sty convertxy_backupy
-			clc
-get_x: 		ldx #$ff
-get_y: 		ldy #$ff
-			lda x_data,y
-			stx add_x2+1
-add_x2: 		adc #0
-			sta screen2+1
-			lda y_data,y
-			sta screen2+2
+			sta getXYonScreenAdress+2
 			bcc no_carry2
-			inc screen2+2
-no_carry2:
-	//		set_char: lda #$70
-screen2: 	lda $ffff
-
-		ldx convertxy_backupx
-		ldy convertxy_backupy
-rts
-
-
-convertxy_backupa: .byte 00
-convertxy_backupx: .byte 00
-convertxy_backupy: .byte 00
+			inc getXYonScreenAdress+2
+		no_carry2:
+		getXYonScreenAdress: 	lda $ffff
+		ldx getXYonScreenBackupX
+		ldy getXYonScreenBackupY
+		rts
+	getXYonScreenBackupX: .byte 00
+	getXYonScreenBackupY: .byte 00
 
 x_data: 
 	.byte 1024+40*0 //00
@@ -762,6 +737,7 @@ y_data:
 	.byte $07
 	.byte $07
 	.byte $07
+
 
 
 // testing the getTempChar
