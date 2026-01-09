@@ -21,6 +21,7 @@
 
 static uint8_t tile_props[256];
 static uint8_t waypoint_map[1000]; 
+static uint8_t path_overlay[1000]; // Marks the yellow path
 
 typedef struct {
     uint8_t stack[POOL_SIZE];
@@ -41,7 +42,8 @@ static Settler npc[3];
 
 uint8_t get_map_color(uint8_t x, uint8_t y) {
     uint16_t off = (y * 40) + x;
-    if (waypoint_map[off]) return 5; // Green Waypoint
+    if (waypoint_map[off]) return 5;    // Green Waypoint
+    if (path_overlay[off]) return 7;    // Yellow Calculated Path
     
     uint8_t tile = settlers_map[off];
     if (tile_props[tile] & FLAG_PATH) return 2; // Red Path
@@ -52,6 +54,66 @@ uint8_t get_map_color(uint8_t x, uint8_t y) {
 void set_waypoint(uint8_t x, uint8_t y) {
     if (x < 40 && y < 25) {
         waypoint_map[(y * 40) + x] = 1;
+    }
+}
+
+// Function to calculate a path between two points ONLY using FLAG_PATH tiles
+void calculate_yellow_path_on_road(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2) {
+    static uint8_t parent_map[1000]; 
+    static uint16_t queue[1000];
+    uint16_t head = 0;
+    uint16_t tail = 0;
+    
+    memset(parent_map, 255, 1000);
+    memset(path_overlay, 0, 1000);
+
+    uint16_t start = (y1 * 40) + x1;
+    uint16_t target = (y2 * 40) + x2;
+
+    queue[tail++] = start;
+    parent_map[start] = 4; 
+
+    while (head < tail) {
+        uint16_t curr = queue[head++];
+        if (curr == target) break;
+
+        uint8_t cx = curr % 40;
+        uint8_t cy = curr / 40;
+
+        for (uint8_t i = 0; i < 4; i++) {
+            uint8_t nx = cx, ny = cy;
+            if (i == 0 && cy > 0) ny--;      
+            else if (i == 1 && cy < 24) ny++; 
+            else if (i == 2 && cx > 0) nx--;  
+            else if (i == 3 && cx < 39) nx++; 
+            else continue;
+
+            uint16_t next = (ny * 40) + nx;
+            uint8_t tile = settlers_map[next];
+
+            if ((tile_props[tile] & FLAG_PATH) && parent_map[next] == 255) {
+                parent_map[next] = i; 
+                queue[tail++] = next;
+            }
+        }
+    }
+
+    if (parent_map[target] != 255) {
+        uint16_t curr = target;
+        while (curr != start) {
+            path_overlay[curr] = 1;
+            uint8_t cx = curr % 40;
+            uint8_t cy = curr / 40;
+            uint8_t dir = parent_map[curr];
+
+            if (dir == 0) cy++;      
+            else if (dir == 1) cy--; 
+            else if (dir == 2) cx++; 
+            else if (dir == 3) cx--; 
+            
+            curr = (cy * 40) + cx;
+        }
+        path_overlay[start] = 1;
     }
 }
 
@@ -210,7 +272,10 @@ int main(void) {
     // 2. Waypoint Initialization
     memset(waypoint_map, 0, 1000);
     set_waypoint(2, 2);
-    set_waypoint(8, 2);
+    set_waypoint(7, 11);
+
+    // Calculate path ONLY using FLAG_PATH tiles
+    calculate_yellow_path_on_road(2, 2, 7, 11);
 
     refresh_all_colors();
 
@@ -223,6 +288,7 @@ int main(void) {
         wait_vsync();
         
         handle_input(&npc[0]); // Player
+
         
         for(uint8_t i = 0; i < 3; i++) {
             if (i > 0) handle_ai(&npc[i]); // NPCs only
