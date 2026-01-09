@@ -9,17 +9,17 @@
 #define COLOR_RAM       ((uint8_t*)0xD800)
 #define CHARSET_DEST    ((uint8_t*)0x3000)
 
-// --- Configuration ---
-#define TEMP_START 200      // Indices 200-255 for software-sprites
-#define TEMP_COUNT 56
-
-// --- Software Sprite State ---
-static uint8_t temp_slots_used = 0;
+// --- Hardcoded Temporary Characters ---
+#define TEMP_A 254 // $FE
+#define TEMP_B 255 // $FF
 
 typedef struct {
-    uint8_t x, y;          // Grid position (0-39, 0-24)
-    uint8_t off_x, off_y;  // Pixel offset (0-7)
-    uint8_t char_index;    // Source character index
+    uint8_t x, y;          
+    uint8_t off_x, off_y;  
+    uint8_t char_index;    
+    uint8_t color;
+    int8_t  dir_x, dir_y;    
+    uint8_t steps_remaining; 
 } Settler;
 
 // --- System Functions ---
@@ -40,111 +40,91 @@ void init_system() {
 
 // --- Software Sprite Engine ---
 
-uint8_t allocate_temp_char() {
-    if (temp_slots_used < TEMP_COUNT) {
-        return TEMP_START + (temp_slots_used++);
-    }
-    return 0; 
-}
-
-void reset_temp_pool() {
-    temp_slots_used = 0;
-}
-
-void draw_merged_tile(uint8_t x, uint8_t y, uint8_t temp_idx) {
+void draw_merged_tile(uint8_t x, uint8_t y, uint8_t temp_idx, uint8_t color) {
     if (x >= 40 || y >= 25) return;
-    
     uint16_t offset = (y * 40) + x;
     uint8_t bg_char = settlers_map[offset]; 
-    
     uint8_t* bg_ptr = CHARSET_DEST + (bg_char << 3);
     uint8_t* ov_ptr = CHARSET_DEST + (temp_idx << 3);
 
     for (uint8_t i = 0; i < 8; i++) {
         ov_ptr[i] |= bg_ptr[i]; 
     }
-
     SCREEN_RAM[offset] = temp_idx;
-    COLOR_RAM[offset] = 1; 
+    COLOR_RAM[offset] = color; 
 }
 
-void draw_settler_smooth(Settler* s) {
-    uint8_t t[4];
-    for (uint8_t i = 0; i < 4; i++) {
-        t[i] = allocate_temp_char();
-        if (!t[i]) return;
-        memset(CHARSET_DEST + (t[i] << 3), 0, 8); 
-    }
+// Now accepts the specific temp characters to use
+void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
+    memset(CHARSET_DEST + (t1 << 3), 0, 8);
+    memset(CHARSET_DEST + (t2 << 3), 0, 8);
 
     uint8_t* src_gfx = CHARSET_DEST + (s->char_index << 3);
 
     for (uint8_t i = 0; i < 8; i++) {
-        uint16_t row = (uint16_t)src_gfx[i] << (8 - s->off_x);
-        uint8_t left_bits = (uint8_t)(row >> 8);
-        uint8_t right_bits = (uint8_t)(row & 0xFF);
-
-        uint8_t target_y = i + s->off_y;
-        if (target_y < 8) {
-            (CHARSET_DEST + (t[0] << 3))[target_y] = left_bits;
-            (CHARSET_DEST + (t[1] << 3))[target_y] = right_bits;
+        if (s->off_x > 0) {
+            uint16_t row = (uint16_t)src_gfx[i] << (8 - s->off_x);
+            (CHARSET_DEST + (t1 << 3))[i] = (uint8_t)(row >> 8);
+            (CHARSET_DEST + (t2 << 3))[i] = (uint8_t)(row & 0xFF);
         } else {
-            (CHARSET_DEST + (t[2] << 3))[target_y - 8] = left_bits;
-            (CHARSET_DEST + (t[3] << 3))[target_y - 8] = right_bits;
+            uint8_t target_y = i + s->off_y;
+            if (target_y < 8) {
+                (CHARSET_DEST + (t1 << 3))[target_y] = src_gfx[i];
+            } else {
+                (CHARSET_DEST + (t2 << 3))[target_y - 8] = src_gfx[i];
+            }
         }
     }
 
-    draw_merged_tile(s->x,     s->y,     t[0]);
-    draw_merged_tile(s->x + 1, s->y,     t[1]);
-    draw_merged_tile(s->x,     s->y + 1, t[2]);
-    draw_merged_tile(s->x + 1, s->y + 1, t[3]);
+    draw_merged_tile(s->x, s->y, t1, s->color);
+    if (s->off_x > 0) draw_merged_tile(s->x + 1, s->y, t2, s->color);
+    if (s->off_y > 0) draw_merged_tile(s->x, s->y + 1, t2, s->color);
 }
 
-void move_settler(Settler* s, int8_t dx, int8_t dy) {
-    int16_t px = (s->x * 8) + s->off_x + dx;
-    int16_t py = (s->y * 8) + s->off_y + dy;
-    
-    if (px < 0) px = 0; if (px > 310) px = 310;
-    if (py < 0) py = 0; if (py > 190) py = 190;
+// --- Full Movement Logic ---
 
-    s->x = px / 8;
-    s->off_x = px % 8;
-    s->y = py / 8;
-    s->off_y = py % 8;
+// Wrapper that sets up the movement state
+void start_move(Settler* s, int8_t dx, int8_t dy) {
+    if (s->steps_remaining == 0) { 
+        s->dir_x = dx;
+        s->dir_y = dy;
+        s->steps_remaining = 8; 
+    }
 }
 
-// --- Keyboard Input ---
+// Move functions now define which temp characters to pass to the logic
+void move_up(Settler* s)    { start_move(s,  0, -1); }
+void move_down(Settler* s)  { start_move(s,  0,  1); }
+void move_left(Settler* s)  { start_move(s, -1,  0); }
+void move_right(Settler* s) { start_move(s,  1,  0); }
 
-void readKeys(Settler* npc) {
-    // Select CIA1 Row 1
+void update_settler(Settler* s) {
+    if (s->steps_remaining > 0) {
+        int16_t px = (s->x * 8) + s->off_x + s->dir_x;
+        int16_t py = (s->y * 8) + s->off_y + s->dir_y;
+
+        s->x = px / 8;
+        s->off_x = px % 8;
+        s->y = py / 8;
+        s->off_y = py % 8;
+
+        s->steps_remaining--;
+    }
+}
+
+void handle_input(Settler* s) {
+    if (s->steps_remaining > 0) return; 
+
     (*(volatile uint8_t*)0xDC00) = 0xFD; 
     uint8_t row1 = (*(volatile uint8_t*)0xDC01);
 
-    // W: Up
-    if (!(row1 & 0x02)) {
-        // moveSprite(0, -1);
-        move_settler(npc, 0, -1); 
-    }
-    
-    // A: Left
-    if (!(row1 & 0x04)) {
-        // moveSprite(-1, 0);
-        move_settler(npc, -1, 0); 
-    }
-    
-    // S: Down
-    if (!(row1 & 0x20)) {
-        // moveSprite(0, 1);
-        move_settler(npc, 0, 1);
-    }
-
-    // Select CIA1 Row 2
-    (*(volatile uint8_t*)0xDC00) = 0xFB; 
-    uint8_t row2 = (*(volatile uint8_t*)0xDC01);
-    
-    // D: Right
-    if (!(row2 & 0x04)) {
-        // moveSprite(1, 0);  
-        move_settler(npc, 1, 0); 
+    if (!(row1 & 0x02))      move_up(s);
+    else if (!(row1 & 0x20)) move_down(s);
+    else if (!(row1 & 0x04)) move_left(s);
+    else {
+        (*(volatile uint8_t*)0xDC00) = 0xFB; 
+        uint8_t row2 = (*(volatile uint8_t*)0xDC01);
+        if (!(row2 & 0x04))  move_right(s);
     }
 }
 
@@ -152,32 +132,24 @@ void readKeys(Settler* npc) {
 
 int main(void) {
     init_system();
-    // initSprite0();
-
-    Settler npc = {10, 10, 0, 0, 48}; 
+    Settler npc = {10, 10, 0, 0, 48, 1, 0, 0, 0}; 
 
     while (1) {
         wait_vsync();
 
-        // 1. CLEANUP: Redraw 4x4 area around NPC (increased from 3x3 for safety)
-        for (uint8_t j = 0; j < 4; j++) {
-            for (uint8_t i = 0; i < 4; i++) {
-                uint8_t tx = npc.x + i;
-                uint8_t ty = npc.y + j;
-                if (tx < 40 && ty < 25) {
-                    uint16_t off = (ty * 40) + tx;
-                    SCREEN_RAM[off] = settlers_map[off];
-                }
-            }
-        }
+        // 1. SURGICAL CLEANUP
+        uint16_t off = (npc.y * 40) + npc.x;
+        SCREEN_RAM[off] = settlers_map[off];
+        SCREEN_RAM[off + 1] = settlers_map[off + 1];
+        SCREEN_RAM[off + 40] = settlers_map[off + 40];
+        SCREEN_RAM[off + 41] = settlers_map[off + 41];
 
-        reset_temp_pool();
-        
-        // 2. INPUT & LOGIC
-        readKeys(&npc);             
+        // 2. LOGIC
+        handle_input(&npc);             
+        update_settler(&npc);  
 
-        // 3. DRAW
-        draw_settler_smooth(&npc);
+        // 3. DRAW - Passing the desired temp characters here
+        draw_settler(&npc, TEMP_A, TEMP_B);
     }
     return 0;
 }
