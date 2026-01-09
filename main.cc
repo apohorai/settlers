@@ -4,18 +4,17 @@
 #include "charset_data.h"
 #include "map_data.h"
 
-// --- Hardware Memory Definitions ---
 #define SCREEN_RAM      ((uint8_t*)0x0400)
 #define COLOR_RAM       ((uint8_t*)0xD800)
 #define CHARSET_DEST    ((uint8_t*)0x3000)
 
-// --- Hardcoded Temporary Characters ---
-#define TEMP_A 254 // $FE
-#define TEMP_B 255 // $FF
+#define TEMP_A    254 // $FE
+#define TEMP_B    255 // $FF
 
 typedef struct {
     uint8_t x, y;          
     uint8_t off_x, off_y;  
+    uint8_t old_x, old_y;  
     uint8_t char_index;    
     uint8_t color;
     int8_t  dir_x, dir_y;    
@@ -38,117 +37,100 @@ void init_system() {
     memset((void*)COLOR_RAM, 1, 1000); 
 }
 
-// --- Software Sprite Engine ---
-
-void draw_merged_tile(uint8_t x, uint8_t y, uint8_t temp_idx, uint8_t color) {
+// --- Helper: Pre-fills a temp char with a clean background tile ---
+void prepare_temp(uint8_t x, uint8_t y, uint8_t t_idx) {
     if (x >= 40 || y >= 25) return;
-    uint16_t offset = (y * 40) + x;
-    uint8_t bg_char = settlers_map[offset]; 
-    uint8_t* bg_ptr = CHARSET_DEST + (bg_char << 3);
-    uint8_t* ov_ptr = CHARSET_DEST + (temp_idx << 3);
-
-    for (uint8_t i = 0; i < 8; i++) {
-        ov_ptr[i] |= bg_ptr[i]; 
-    }
-    SCREEN_RAM[offset] = temp_idx;
-    COLOR_RAM[offset] = color; 
+    uint8_t bg_char = settlers_map[(y * 40) + x];
+    memcpy(CHARSET_DEST + (t_idx << 3), CHARSET_DEST + (bg_char << 3), 8);
+    SCREEN_RAM[(y * 40) + x] = t_idx;
 }
 
-// Now accepts the specific temp characters to use
+// --- Main Drawing Engine ---
 void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
-    memset(CHARSET_DEST + (t1 << 3), 0, 8);
-    memset(CHARSET_DEST + (t2 << 3), 0, 8);
+    uint8_t* src = CHARSET_DEST + (s->char_index << 3);
+    uint8_t* dst1 = CHARSET_DEST + (t1 << 3);
+    uint8_t* dst2 = CHARSET_DEST + (t2 << 3);
 
-    uint8_t* src_gfx = CHARSET_DEST + (s->char_index << 3);
-
-    for (uint8_t i = 0; i < 8; i++) {
-        if (s->off_x > 0) {
-            uint16_t row = (uint16_t)src_gfx[i] << (8 - s->off_x);
-            (CHARSET_DEST + (t1 << 3))[i] = (uint8_t)(row >> 8);
-            (CHARSET_DEST + (t2 << 3))[i] = (uint8_t)(row & 0xFF);
-        } else {
+    // CASE 1: HORIZONTAL MOVEMENT
+    if (s->off_x > 0) {
+        prepare_temp(s->x, s->y, t1);
+        prepare_temp(s->x + 1, s->y, t2);
+        for (uint8_t i = 0; i < 8; i++) {
+            uint16_t row = (uint16_t)src[i] << (8 - s->off_x);
+            dst1[i] |= (uint8_t)(row >> 8);
+            dst2[i] |= (uint8_t)(row & 0xFF);
+        }
+    } 
+    // CASE 2: VERTICAL MOVEMENT
+    else if (s->off_y > 0) {
+        prepare_temp(s->x, s->y, t1);
+        prepare_temp(s->x, s->y + 1, t2);
+        for (uint8_t i = 0; i < 8; i++) {
             uint8_t target_y = i + s->off_y;
-            if (target_y < 8) {
-                (CHARSET_DEST + (t1 << 3))[target_y] = src_gfx[i];
-            } else {
-                (CHARSET_DEST + (t2 << 3))[target_y - 8] = src_gfx[i];
-            }
+            if (target_y < 8) dst1[target_y] |= src[i];
+            else             dst2[target_y - 8] |= src[i];
         }
     }
-
-    draw_merged_tile(s->x, s->y, t1, s->color);
-    if (s->off_x > 0) draw_merged_tile(s->x + 1, s->y, t2, s->color);
-    if (s->off_y > 0) draw_merged_tile(s->x, s->y + 1, t2, s->color);
-}
-
-// --- Full Movement Logic ---
-
-// Wrapper that sets up the movement state
-void start_move(Settler* s, int8_t dx, int8_t dy) {
-    if (s->steps_remaining == 0) { 
-        s->dir_x = dx;
-        s->dir_y = dy;
-        s->steps_remaining = 8; 
+    // CASE 3: IDLE / SNAPPED TO GRID
+    else {
+        prepare_temp(s->x, s->y, t1);
+        for (uint8_t i = 0; i < 8; i++) {
+            dst1[i] |= src[i];
+        }
     }
 }
-
-// Move functions now define which temp characters to pass to the logic
-void move_up(Settler* s)    { start_move(s,  0, -1); }
-void move_down(Settler* s)  { start_move(s,  0,  1); }
-void move_left(Settler* s)  { start_move(s, -1,  0); }
-void move_right(Settler* s) { start_move(s,  1,  0); }
 
 void update_settler(Settler* s) {
     if (s->steps_remaining > 0) {
         int16_t px = (s->x * 8) + s->off_x + s->dir_x;
         int16_t py = (s->y * 8) + s->off_y + s->dir_y;
 
-        s->x = px / 8;
-        s->off_x = px % 8;
-        s->y = py / 8;
-        s->off_y = py % 8;
+        s->x = px / 8;     s->off_x = px % 8;
+        s->y = py / 8;     s->off_y = py % 8;
 
         s->steps_remaining--;
+
+        if (s->steps_remaining == 0) {
+            // Restore background to vacated tiles
+            uint16_t old_off = (s->old_y * 40) + s->old_x;
+            SCREEN_RAM[old_off] = settlers_map[old_off];
+            if (s->dir_x != 0) SCREEN_RAM[old_off + 1] = settlers_map[old_off + 1];
+            if (s->dir_y != 0) SCREEN_RAM[old_off + 40] = settlers_map[old_off + 40];
+
+            s->dir_x = 0; s->dir_y = 0;
+        }
+    }
+}
+
+void start_move(Settler* s, int8_t dx, int8_t dy) {
+    if (s->steps_remaining == 0) { 
+        s->old_x = s->x; s->old_y = s->y;
+        s->dir_x = dx;   s->dir_y = dy;
+        s->steps_remaining = 8; 
     }
 }
 
 void handle_input(Settler* s) {
     if (s->steps_remaining > 0) return; 
-
     (*(volatile uint8_t*)0xDC00) = 0xFD; 
     uint8_t row1 = (*(volatile uint8_t*)0xDC01);
-
-    if (!(row1 & 0x02))      move_up(s);
-    else if (!(row1 & 0x20)) move_down(s);
-    else if (!(row1 & 0x04)) move_left(s);
+    if (!(row1 & 0x02))      start_move(s, 0, -1);
+    else if (!(row1 & 0x20)) start_move(s, 0, 1);
+    else if (!(row1 & 0x04)) start_move(s, -1, 0);
     else {
         (*(volatile uint8_t*)0xDC00) = 0xFB; 
-        uint8_t row2 = (*(volatile uint8_t*)0xDC01);
-        if (!(row2 & 0x04))  move_right(s);
+        if (!((*(volatile uint8_t*)0xDC01) & 0x04)) start_move(s, 1, 0);
     }
 }
 
-// --- Main Loop ---
-
 int main(void) {
     init_system();
-    Settler npc = {10, 10, 0, 0, 48, 1, 0, 0, 0}; 
+    Settler npc = {10, 10, 0, 0, 10, 10, 48, 1, 0, 0, 0}; 
 
     while (1) {
         wait_vsync();
-
-        // 1. SURGICAL CLEANUP
-        uint16_t off = (npc.y * 40) + npc.x;
-        SCREEN_RAM[off] = settlers_map[off];
-        SCREEN_RAM[off + 1] = settlers_map[off + 1];
-        SCREEN_RAM[off + 40] = settlers_map[off + 40];
-        SCREEN_RAM[off + 41] = settlers_map[off + 41];
-
-        // 2. LOGIC
         handle_input(&npc);             
         update_settler(&npc);  
-
-        // 3. DRAW - Passing the desired temp characters here
         draw_settler(&npc, TEMP_A, TEMP_B);
     }
     return 0;
