@@ -168,32 +168,8 @@ void handle_input(Settler* s) {
     if (!(r & 0x02)) start_move(s, 0, -1); else if (!(r & 0x20)) start_move(s, 0, 1); else if (!(r & 0x04)) start_move(s, -1, 0);
     else { (*(volatile uint8_t*)0xDC00) = 0xFB; if (!((*(volatile uint8_t*)0xDC01) & 0x04)) start_move(s, 1, 0); }
 }
-
-int main(void) {
-    init_pool(); init_system();
-    memset(tile_props, FLAG_NONE, 256); for(uint8_t i = 0; i <= 6; i++) tile_props[i] = FLAG_PATH;
-    memset(waypoint_map, 0, 1000); set_waypoint(2, 2); set_waypoint(7, 11);
-    
-    memset(npc, 0, sizeof(npc));
-    npc[1].x = 2; npc[1].y = 2; npc[1].old_x = 2; npc[1].old_y = 2;
-    npc[1].char_index = 48; npc[1].color = 7;
-
-    calculate_yellow_path_on_road(2, 2, 7, 11);
-    load_path_to_npc(&npc[1], 7, 11, (2 * 40) + 2, 0); 
-    calculate_yellow_path_on_road(7, 11, 2, 2);
-    load_path_to_npc(&npc[1], 2, 2, (11 * 40) + 7, 1); 
-    
-    calculate_yellow_path_on_road(2, 2, 7, 11);
-    refresh_all_colors();
-
-    npc[0].x = 10; npc[0].y = 10; npc[0].char_index = 48; npc[0].color = 1;
-    npc[2].x = 20; npc[2].y = 18; npc[2].char_index = 48; npc[2].color = 3;
-
-    while (1) {
-        wait_vsync();
-        handle_input(&npc[0]); 
-
-        // --- FIXED T DUMP HANDLER ---
+void debugHandler(){
+    // --- FIXED T DUMP HANDLER ---
         (*(volatile uint8_t*)0xDC00) = 0xFB; 
         if (!((*(volatile uint8_t*)0xDC01) & 0x40)) { 
             __asm__("sei"); 
@@ -215,12 +191,90 @@ int main(void) {
             }
             while(1); 
         }
-
-        handle_npc_pathing(&npc[1]);
-        for(uint8_t i = 0; i < 3; i++) {
-            if (i != 0 && i != 1) handle_ai(&npc[i]); 
-            update_settler(&npc[i]); draw_settler(&npc[i]);
-        }
-    }
-    return 0;
 }
+
+int main(void) {
+    init_pool(); // Initialize the character pool
+    init_system(); // Initialize the system
+
+    // Set tile properties
+    memset(tile_props, FLAG_NONE, 256);
+    for (uint8_t i = 0; i <= 6; i++) {
+        tile_props[i] = FLAG_PATH;
+    }
+
+    // Define waypoints as arrays
+    static uint8_t waypoint1[] = {2, 2};
+    static uint8_t waypoint2[] = {7, 11};
+
+    // Initialize waypoint map
+    memset(waypoint_map, 0, 1000);
+    set_waypoint(waypoint1[0], waypoint1[1]); // Set waypoint at (2, 2)
+    set_waypoint(waypoint2[0], waypoint2[1]); // Set waypoint at (7, 11)
+
+    // Initialize NPCs
+    memset(npc, 0, sizeof(npc));
+    
+    // NPC 0: Player controlled
+    npc[0].x = 10;
+    npc[0].y = 10;
+    npc[0].char_index = 48;
+    npc[0].color = 1;
+
+    // NPC 1: Controlled by player
+    npc[1].x = 2;
+    npc[1].y = 2;
+    npc[1].old_x = 2;
+    npc[1].old_y = 2;
+    npc[1].char_index = 48;
+    npc[1].color = 7;
+
+    // Calculate path for NPC 1 to move from (2, 2) to (7, 11)
+    calculate_yellow_path_on_road(waypoint1[0], waypoint1[1], waypoint2[0], waypoint2[1]);
+    load_path_to_npc(&npc[1], waypoint2[0], waypoint2[1], (waypoint1[0] * 40) + waypoint1[1], 0);
+
+    // Calculate path for NPC 1 to move back from (7, 11) to (2, 2)
+    calculate_yellow_path_on_road(waypoint2[0], waypoint2[1], waypoint1[0], waypoint1[1]);
+    load_path_to_npc(&npc[1], waypoint1[0], waypoint1[1], (waypoint2[0] * 40) + waypoint2[1], 1);
+// Refresh all colors on the screen
+refresh_all_colors();
+
+// NPC 2: Random movement
+npc[2].x = 20;
+npc[2].y = 18;
+npc[2].char_index = 48;
+npc[2].color = 3;
+
+// Main game loop
+while (1) {
+    wait_vsync();
+
+    // Handle input for NPC 0
+    handle_input(&npc[0]);
+
+    // Handle NPC pathing for NPC 1
+    handle_npc_pathing(&npc[1]);
+
+    // Handle AI for NPC 2
+    handle_ai(&npc[2]);
+
+    // Update and draw all NPCs
+    for (uint8_t i = 0; i < 3; i++) {
+        update_settler(&npc[i]);
+        draw_settler(&npc[i]);
+    }
+    debugHandler();
+}
+return 0;
+
+
+
+
+
+
+
+
+
+}
+
+
