@@ -1,7 +1,7 @@
 # convert.py
 import re
 
-with open('char.asm', 'r') as f:
+with open('chars copy.asm', 'r') as f:
     content = f.read()
 
 # Find all hex values like $00 and change to 0x00
