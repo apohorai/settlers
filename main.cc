@@ -39,6 +39,45 @@ typedef struct {
     uint8_t steps_remaining;   // 8 = moving, 0 = stationary
 } Settler;
 
+
+// ============================================================================
+// draw_int_fixed - Display integer with fixed width (leading zeros)
+// 
+// Parameters:
+//   value: The number to display (0-65535)
+//   width: Number of digits to show (1-5)
+//   x: Screen column (0-39)
+//   y: Screen row (0-24)
+//   color: C64 color value (0-15)
+// ============================================================================
+void drawInt(uint16_t value, uint8_t width, uint8_t x, uint8_t y, uint8_t color) {
+    uint8_t digits[5];
+    uint16_t temp = value;
+    uint16_t offset;
+    
+    // ============================================================
+    // STEP 1: Extract digits from the number
+    // ============================================================
+    for (uint8_t i = 0; i < width; i++) {
+        uint8_t digit = temp % 10;
+        if (digit == 0) {
+            digits[width - 1 - i] = 0x79;  // '0'
+        } else {
+            digits[width - 1 - i] = 0x70 + (digit - 1);  // '1' through '9'
+        }
+        temp = temp / 10;
+    }
+    
+    // ============================================================
+    // STEP 2: Display all digits
+    // ============================================================
+    for (uint8_t i = 0; i < width; i++) {
+        offset = (y * 40) + x + i;
+        SCREEN_RAM[offset] = digits[i];
+        COLOR_RAM[offset] = color;
+    }
+}
+
 // ============================================================================
 // SYSTEM FUNCTIONS
 // ============================================================================
@@ -299,13 +338,15 @@ int main(void) {
     // Create a player-controlled settler at (10,10)
     // Using character 48 from charset, white color (1)
     Settler npc = {10, 10, 0, 0, 10, 10, 48, 1, 0, 0, 0}; 
-
+    
     // Main game loop
     while (1) {
         wait_vsync();                    // Sync with screen refresh
         handle_input(&npc);              // Check keyboard
         update_settler(&npc);            // Update position if moving
         draw_settler(&npc, TEMP_A, TEMP_B);  // Draw at current position
+        drawInt(npc.x, 2, 30, 19, 1); 
+        drawInt(npc.y, 2, 30, 20, 1);  
     }
     
     return 0;
