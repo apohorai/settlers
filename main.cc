@@ -14,8 +14,10 @@
 // ============================================================================
 // TEMPORARY CHARACTER SLOTS
 // ============================================================================
-#define TEMP_A    254 // $FE - First temp character for sprite drawing
-#define TEMP_B    255 // $FF - Second temp character (for smooth movement)
+#define TEMP_A    254 // $FE - First temp character for settler 1
+#define TEMP_B    255 // $FF - Second temp character for settler 1
+#define TEMP_C    252 // $FC - First temp character for settler 2
+#define TEMP_D    253 // $FD - Second temp character for settler 2
 
 // ============================================================================
 // SETTLER STRUCTURE
@@ -292,38 +294,45 @@ void start_move(Settler* s, int8_t dx, int8_t dy) {
 // ============================================================================
 
 /**
- * Read C64 keyboard and control the settler with cursor keys.
- * 
- * @param s    Pointer to the player-controlled settler
- * 
+ * Handle input from keyboard and move settlers.
+ * Both settlers move in the same direction when arrow keys are pressed.
+ *
  * Key mappings:
  * - UP arrow    → Move up (dy = -1)
  * - DEL key     → Move down (used as substitute)
  * - LEFT arrow  → Move left (dx = -1)
  * - RIGHT arrow → Move right (dx = 1)
- * 
+ *
  * Uses CIA #1 registers:
  * - $DC00: Select keyboard row
  * - $DC01: Read column status (0 = key pressed)
  */
-void handle_input(Settler* s) {
-    if (s->steps_remaining > 0) return; 
-    
+void handle_input(Settler* s1, Settler* s2) {
+    int8_t dx = 0, dy = 0;
+
     // Check Row 1 (UP, LEFT, DEL)
-    (*(volatile uint8_t*)0xDC00) = 0xFD; 
+    (*(volatile uint8_t*)0xDC00) = 0xFD;
     uint8_t row1 = (*(volatile uint8_t*)0xDC01);
-    
+
     if (!(row1 & 0x02))           // UP arrow (bit 1)
-        start_move(s, 0, -1);
+        dy = -1;
     else if (!(row1 & 0x20))      // DEL key used as DOWN (bit 5)
-        start_move(s, 0, 1);
+        dy = 1;
     else if (!(row1 & 0x04))      // LEFT arrow (bit 2)
-        start_move(s, -1, 0);
+        dx = -1;
     else {
         // Check Row 2 for RIGHT arrow
-        (*(volatile uint8_t*)0xDC00) = 0xFB; 
+        (*(volatile uint8_t*)0xDC00) = 0xFB;
         if (!((*(volatile uint8_t*)0xDC01) & 0x04))  // RIGHT arrow (bit 2)
-            start_move(s, 1, 0);
+            dx = 1;
+    }
+
+    // Apply movement to both settlers
+    if (dx != 0 || dy != 0) {
+        if (s1->steps_remaining == 0)
+            start_move(s1, dx, dy);
+        if (s2->steps_remaining == 0)
+            start_move(s2, dx, dy);
     }
 }
 
@@ -334,20 +343,34 @@ void handle_input(Settler* s) {
 int main(void) {
     // Initialize hardware and load assets
     init_system();
-    
-    // Create a player-controlled settler at (10,10)
-    // Using character 48 from charset, white color (1)
-    Settler npc = {10, 10, 0, 0, 10, 10, 48, 1, 0, 0, 0}; 
-    
+
+    // Create two settlers, both white
+    // Settler 1: starts at (10,10)
+    // Settler 2: starts at (20,10)
+    Settler settler1 = {10, 10, 0, 0, 10, 10, 48, 1, 0, 0, 0};
+    Settler settler2 = {20, 10, 0, 0, 20, 10, 48, 1, 0, 0, 0};
+
     // Main game loop
     while (1) {
-        wait_vsync();                    // Sync with screen refresh
-        handle_input(&npc);              // Check keyboard
-        update_settler(&npc);            // Update position if moving
-        draw_settler(&npc, TEMP_A, TEMP_B);  // Draw at current position
-        drawInt(npc.x, 2, 30, 19, 1); 
-        drawInt(npc.y, 2, 30, 20, 1);  
+        wait_vsync();                         // Sync with screen refresh
+        handle_input(&settler1, &settler2);  // Check keyboard for both
+
+        // Update both settlers
+        update_settler(&settler1);
+        update_settler(&settler2);
+
+        // Draw both settlers using separate temp char slots
+        draw_settler(&settler1, TEMP_A, TEMP_B);
+        draw_settler(&settler2, TEMP_C, TEMP_D);
+
+        // Display settler1 coordinates
+        drawInt(settler1.x, 2, 30, 19, 1);
+        drawInt(settler1.y, 2, 30, 20, 1);
+
+        // Display settler2 coordinates
+        drawInt(settler2.x, 2, 35, 19, 1);
+        drawInt(settler2.y, 2, 35, 20, 1);
     }
-    
+
     return 0;
 }
