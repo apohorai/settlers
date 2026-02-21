@@ -16,7 +16,7 @@
 // ============================================================================
 #define NUM_NPCS      10   // Maximum number of settlers
 #define TEMP_CHARS    128  // Pool of temporary characters (indices 128-255)
-#define BITMAP_SIZE   16   // Bitmap for tracking temp char usage (128 bits / 8 bits per byte)
+
 
 // ============================================================================
 // SETTLER STRUCTURE
@@ -48,7 +48,6 @@ typedef struct {
 // GLOBAL STATE
 // ============================================================================
 Settler settlers[NUM_NPCS];
-uint8_t temp_used[BITMAP_SIZE];  // Bitmap for temp char allocation
 uint8_t selected_settler = 0;    // Currently selected settler (0-9)
 
 
@@ -99,51 +98,8 @@ void prepare_temp(uint8_t x, uint8_t y, uint8_t t_idx);
 void draw_settler(Settler* s);
 void release_npc_temps(Settler* s);
 
-/**
- * Allocate a single temporary character from the pool.
- * Returns 255 if no characters available.
- */
-uint8_t allocate_temp(void) {
-    for (uint8_t i = 0; i < TEMP_CHARS; i++) {
-        uint8_t byte_idx = i / 8;
-        uint8_t bit_idx = i % 8;
-        if (!(temp_used[byte_idx] & (1 << bit_idx))) {
-            temp_used[byte_idx] |= (1 << bit_idx);
-            return 128 + i;  // Chars 128-255
-        }
-    }
-    return 255;  // Allocation failed
-}
 
-/**
- * Release a temporary character back to the pool.
- */
-void release_temp(uint8_t idx) {
-    if (idx < 128) return;  // Invalid index
-    uint8_t local_idx = idx - 128;
-    uint8_t byte_idx = local_idx / 8;
-    uint8_t bit_idx = local_idx % 8;
-    temp_used[byte_idx] &= ~(1 << bit_idx);
-}
 
-/**
- * Allocate two temporary characters for a settler.
- */
-void allocate_npc_temps(Settler* s) {
-    release_npc_temps(s);  // Release any previously allocated
-    s->temp1 = allocate_temp();
-    s->temp2 = allocate_temp();
-}
-
-/**
- * Release two temporary characters from a settler.
- */
-void release_npc_temps(Settler* s) {
-    if (s->temp1 != 255) release_temp(s->temp1);
-    if (s->temp2 != 255) release_temp(s->temp2);
-    s->temp1 = 255;
-    s->temp2 = 255;
-}
 
 // ============================================================================
 // SYSTEM FUNCTIONS
@@ -180,7 +136,7 @@ void init_system() {
 
     // Initialize settlers array and temp tracking
     memset(settlers, 0, sizeof(settlers));
-    memset(temp_used, 0, BITMAP_SIZE);
+
 
     // Initialize all 10 settlers (spread across the screen)
     settlers[0].x = 5;  settlers[0].y = 5;
