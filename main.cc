@@ -474,7 +474,137 @@ void handle_input(void) {
         }
     }
 }
-
+// Trace and display the path between (2,2) and (7,11)
+// Shows path characters on screen starting at (3,1)
+void show_path(void) {
+    // Hardcoded waypoints
+    uint8_t start_x = 2;
+    uint8_t start_y = 2;
+    uint8_t target_x = 7;
+    uint8_t target_y = 11;
+    
+    // Queue for BFS
+    uint8_t queue_x[256];
+    uint8_t queue_y[256];
+    uint8_t head = 0;
+    uint8_t tail = 0;
+    
+    // Visited array and parent tracking
+    uint8_t visited[40][25] = {{0}};
+    int8_t parent_x[40][25];
+    int8_t parent_y[40][25];
+    
+    // Initialize parents to -1
+    for (uint8_t i = 0; i < 40; i++) {
+        for (uint8_t j = 0; j < 25; j++) {
+            parent_x[i][j] = -1;
+            parent_y[i][j] = -1;
+        }
+    }
+    
+    extern const uint8_t settlers_map[];
+    
+    // Check if start and target are valid
+    if (settlers_map[(start_y * 40) + start_x] > 6) return;
+    if (settlers_map[(target_y * 40) + target_x] > 6) return;
+    
+    // Start BFS
+    queue_x[head] = start_x;
+    queue_y[head] = start_y;
+    head++;
+    visited[start_x][start_y] = 1;
+    
+    // Directions: right, down, left, up
+    int8_t dx[4] = {1, 0, -1, 0};
+    int8_t dy[4] = {0, 1, 0, -1};
+    
+    uint8_t found = 0;
+    
+    while (tail < head && !found) {
+        uint8_t x = queue_x[tail];
+        uint8_t y = queue_y[tail];
+        tail++;
+        
+        // Check neighbors
+        for (uint8_t i = 0; i < 4; i++) {
+            uint8_t nx = x + dx[i];
+            uint8_t ny = y + dy[i];
+            
+            if (nx >= 40 || ny >= 25) continue;
+            if (visited[nx][ny]) continue;
+            if (settlers_map[(ny * 40) + nx] > 6) continue;
+            
+            visited[nx][ny] = 1;
+            parent_x[nx][ny] = x;
+            parent_y[nx][ny] = y;
+            
+            if (nx == target_x && ny == target_y) {
+                found = 1;
+                break;
+            }
+            
+            queue_x[head] = nx;
+            queue_y[head] = ny;
+            head++;
+        }
+    }
+    
+    if (!found) {
+        SCREEN_RAM[(1 * 40) + 3] = 0x4E;  // 'N'
+        SCREEN_RAM[(1 * 40) + 4] = 0x4F;  // 'O'
+        return;
+    }
+    
+    // Reconstruct path
+    uint8_t path_x[100];
+    uint8_t path_y[100];
+    uint8_t path_len = 0;
+    
+    uint8_t cx = target_x;
+    uint8_t cy = target_y;
+    
+    while (cx != start_x || cy != start_y) {
+        path_x[path_len] = cx;
+        path_y[path_len] = cy;
+        path_len++;
+        
+        uint8_t px = parent_x[cx][cy];
+        uint8_t py = parent_y[cx][cy];
+        cx = px;
+        cy = py;
+    }
+    path_x[path_len] = start_x;
+    path_y[path_len] = start_y;
+    path_len++;
+    
+    // Display path at (3,1) onward
+    // Format: (X,Y) (X,Y) etc.
+    uint8_t display_x = 3;
+    
+    for (int8_t i = path_len - 1; i >= 0; i--) {
+        // Display X coordinate
+        uint8_t x_digit1 = path_x[i] / 10;
+        uint8_t x_digit2 = path_x[i] % 10;
+        
+        if (x_digit1 > 0) {
+            SCREEN_RAM[(1 * 40) + display_x++] = 0x70 + (x_digit1 - 1);
+        }
+        SCREEN_RAM[(1 * 40) + display_x++] = (x_digit2 == 0) ? 0x79 : 0x70 + (x_digit2 - 1);
+        
+        SCREEN_RAM[(1 * 40) + display_x++] = 0x2C;  // ','
+        
+        // Display Y coordinate
+        uint8_t y_digit1 = path_y[i] / 10;
+        uint8_t y_digit2 = path_y[i] % 10;
+        
+        if (y_digit1 > 0) {
+            SCREEN_RAM[(1 * 40) + display_x++] = 0x70 + (y_digit1 - 1);
+        }
+        SCREEN_RAM[(1 * 40) + display_x++] = (y_digit2 == 0) ? 0x79 : 0x70 + (y_digit2 - 1);
+        
+        SCREEN_RAM[(1 * 40) + display_x++] = 0x20;  // space
+    }
+}
 // ============================================================================
 // MAIN PROGRAM
 // ============================================================================
@@ -483,8 +613,8 @@ int main(void) {
     // Initialize hardware and load assets
     init_system();
 
-    // Temp characters are hardcoded in init_system() - no dynamic allocation needed
-
+    show_path();
+    
     // Main game loop
     while (1) {
         wait_vsync();              // Sync with screen refresh
