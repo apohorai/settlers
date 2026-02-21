@@ -95,6 +95,8 @@ void drawInt(uint16_t value, uint8_t width, uint8_t x, uint8_t y, uint8_t color)
 // ============================================================================
 
 // Forward declarations
+void prepare_temp(uint8_t x, uint8_t y, uint8_t t_idx);
+void draw_settler(Settler* s);
 void release_npc_temps(Settler* s);
 
 /**
@@ -192,13 +194,23 @@ void init_system() {
     settlers[8].x = 15; settlers[8].y = 20;
     settlers[9].x = 25; settlers[9].y = 20;
 
-    // Activate all settlers
+    // Activate all settlers with hardcoded temp character assignments
+    settlers[0].char_index = 48; settlers[0].color = 1; settlers[0].temp1 = 128; settlers[0].temp2 = 129; settlers[0].active = 1;
+    settlers[1].char_index = 48; settlers[1].color = 1; settlers[1].temp1 = 130; settlers[1].temp2 = 131; settlers[1].active = 1;
+    settlers[2].char_index = 48; settlers[2].color = 1; settlers[2].temp1 = 132; settlers[2].temp2 = 133; settlers[2].active = 1;
+    settlers[3].char_index = 48; settlers[3].color = 1; settlers[3].temp1 = 134; settlers[3].temp2 = 135; settlers[3].active = 1;
+    settlers[4].char_index = 48; settlers[4].color = 1; settlers[4].temp1 = 136; settlers[4].temp2 = 137; settlers[4].active = 1;
+    settlers[5].char_index = 48; settlers[5].color = 1; settlers[5].temp1 = 138; settlers[5].temp2 = 139; settlers[5].active = 1;
+    settlers[6].char_index = 48; settlers[6].color = 1; settlers[6].temp1 = 140; settlers[6].temp2 = 141; settlers[6].active = 1;
+    settlers[7].char_index = 48; settlers[7].color = 1; settlers[7].temp1 = 142; settlers[7].temp2 = 143; settlers[7].active = 1;
+    settlers[8].char_index = 48; settlers[8].color = 1; settlers[8].temp1 = 144; settlers[8].temp2 = 145; settlers[8].active = 1;
+    settlers[9].char_index = 48; settlers[9].color = 1; settlers[9].temp1 = 146; settlers[9].temp2 = 147; settlers[9].active = 1;
+
+    // One-time render of all settlers at startup
     for (uint8_t i = 0; i < NUM_NPCS; i++) {
-        settlers[i].char_index = 48;
-        settlers[i].color = 1;  // White
-        settlers[i].temp1 = 255;
-        settlers[i].temp2 = 255;
-        settlers[i].active = 1;
+        if (settlers[i].active) {
+            draw_settler(&settlers[i]);
+        }
     }
 }
 
@@ -219,6 +231,7 @@ void init_system() {
  * 3. Redirect the screen to show the temporary character
  */
 void prepare_temp(uint8_t x, uint8_t y, uint8_t t_idx) {
+    if (t_idx < 128) return;  // Safety guard: only write to temp chars (128-255)
     if (x >= 40 || y >= 25) return;
     uint8_t bg_char = settlers_map[(y * 40) + x];
     memcpy(CHARSET_DEST + (t_idx << 3), CHARSET_DEST + (bg_char << 3), 8);
@@ -298,13 +311,14 @@ void draw_settler(Settler* s) {
     // CASE 3: IDLE / SNAPPED TO GRID
     // ========================================================================
     // No movement offset - settler fits perfectly in one tile.
+    // Initialize temp char with background on first render, then just merge sprite.
     else {
         prepare_temp(s->x, s->y, s->temp1);
         for (uint8_t i = 0; i < 8; i++) {
             dst1[i] |= src[i];
         }
     }
-    
+
     // Set the color for this tile (color RAM is not affected by pixel shifting)
     COLOR_RAM[(s->y * 40) + s->x] = s->color;
 }
@@ -357,6 +371,9 @@ void update_settler(Settler* s) {
 
             // Stop moving
             s->dir_x = 0; s->dir_y = 0;
+
+            // Render settler at final position
+            draw_settler(s);
         }
     }
 }
@@ -376,10 +393,10 @@ void update_settler(Settler* s) {
  * for smooth pixel-by-pixel animation.
  */
 void start_move(Settler* s, int8_t dx, int8_t dy) {
-    if (s->steps_remaining == 0) { 
+    if (s->steps_remaining == 0) {
         s->old_x = s->x; s->old_y = s->y;
         s->dir_x = dx;   s->dir_y = dy;
-        s->steps_remaining = 8; 
+        s->steps_remaining = 8;
     }
 }
 
@@ -499,12 +516,7 @@ int main(void) {
     // Initialize hardware and load assets
     init_system();
 
-    // Allocate temp characters for active settlers
-    for (uint8_t i = 0; i < NUM_NPCS; i++) {
-        if (settlers[i].active) {
-            allocate_npc_temps(&settlers[i]);
-        }
-    }
+    // Temp characters are hardcoded in init_system() - no dynamic allocation needed
 
     // Main game loop
     while (1) {
@@ -518,9 +530,9 @@ int main(void) {
             }
         }
 
-        // Draw all active settlers
+        // Draw only moving settlers (idle settlers don't need per-frame updates)
         for (uint8_t i = 0; i < NUM_NPCS; i++) {
-            if (settlers[i].active) {
+            if (settlers[i].active && settlers[i].steps_remaining > 0) {
                 draw_settler(&settlers[i]);
             }
         }
