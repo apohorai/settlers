@@ -12,12 +12,11 @@
 #define CHARSET_DEST    ((uint8_t*)0x3000)  // Our custom character set location
 
 // ============================================================================
-// TEMPORARY CHARACTER SLOTS
+// SETTLER CONFIGURATION
 // ============================================================================
-#define TEMP_A    254 // $FE - First temp character for settler 1
-#define TEMP_B    255 // $FF - Second temp character for settler 1
-#define TEMP_C    252 // $FC - First temp character for settler 2
-#define TEMP_D    253 // $FD - Second temp character for settler 2
+#define NUM_NPCS      10   // Maximum number of settlers
+#define TEMP_CHARS    128  // Pool of temporary characters (indices 128-255)
+#define BITMAP_SIZE   16   // Bitmap for tracking temp char usage (128 bits / 8 bits per byte)
 
 // ============================================================================
 // SETTLER STRUCTURE
@@ -25,21 +24,32 @@
 typedef struct {
     // Position in tile coordinates (0-39, 0-24)
     uint8_t x, y;
-    
+
     // Sub-pixel offset (0-7) for smooth movement
     uint8_t off_x, off_y;
-    
+
     // Previous position (for cleanup after movement)
     uint8_t old_x, old_y;
-    
+
     // Visual appearance
     uint8_t char_index;  // Base character from charset (usually 48)
     uint8_t color;       // C64 color (0-15)
-    
+
     // Movement state
     int8_t  dir_x, dir_y;     // Direction vector (-1,0,1)
     uint8_t steps_remaining;   // 8 = moving, 0 = stationary
+
+    // Temp character allocation
+    uint8_t temp1, temp2;     // Allocated temp char indices (255 = none)
+    uint8_t active;           // 1 = active, 0 = inactive
 } Settler;
+
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
+Settler settlers[NUM_NPCS];
+uint8_t temp_used[BITMAP_SIZE];  // Bitmap for temp char allocation
+uint8_t selected_settler = 0;    // Currently selected settler (0-9)
 
 
 // ============================================================================
@@ -81,6 +91,59 @@ void drawInt(uint16_t value, uint8_t width, uint8_t x, uint8_t y, uint8_t color)
 }
 
 // ============================================================================
+// TEMP CHARACTER ALLOCATION
+// ============================================================================
+
+// Forward declarations
+void release_npc_temps(Settler* s);
+
+/**
+ * Allocate a single temporary character from the pool.
+ * Returns 255 if no characters available.
+ */
+uint8_t allocate_temp(void) {
+    for (uint8_t i = 0; i < TEMP_CHARS; i++) {
+        uint8_t byte_idx = i / 8;
+        uint8_t bit_idx = i % 8;
+        if (!(temp_used[byte_idx] & (1 << bit_idx))) {
+            temp_used[byte_idx] |= (1 << bit_idx);
+            return 128 + i;  // Chars 128-255
+        }
+    }
+    return 255;  // Allocation failed
+}
+
+/**
+ * Release a temporary character back to the pool.
+ */
+void release_temp(uint8_t idx) {
+    if (idx < 128) return;  // Invalid index
+    uint8_t local_idx = idx - 128;
+    uint8_t byte_idx = local_idx / 8;
+    uint8_t bit_idx = local_idx % 8;
+    temp_used[byte_idx] &= ~(1 << bit_idx);
+}
+
+/**
+ * Allocate two temporary characters for a settler.
+ */
+void allocate_npc_temps(Settler* s) {
+    release_npc_temps(s);  // Release any previously allocated
+    s->temp1 = allocate_temp();
+    s->temp2 = allocate_temp();
+}
+
+/**
+ * Release two temporary characters from a settler.
+ */
+void release_npc_temps(Settler* s) {
+    if (s->temp1 != 255) release_temp(s->temp1);
+    if (s->temp2 != 255) release_temp(s->temp2);
+    s->temp1 = 255;
+    s->temp2 = 255;
+}
+
+// ============================================================================
 // SYSTEM FUNCTIONS
 // ============================================================================
 
@@ -103,14 +166,40 @@ void wait_vsync() {
  * 3. Set border black ($d020 = 0) and background blue ($d021 = 6)
  * 4. Copy map data to screen memory
  * 5. Initialize all colors to white (1)
+ * 6. Initialize settler array and temp char tracking
  */
 void init_system() {
     memcpy(CHARSET_DEST, settlers_charset, 2048);
-    (*(volatile uint8_t*)0xd018) = 0x1C; 
-    (*(volatile uint8_t*)0xd020) = 0;    
-    (*(volatile uint8_t*)0xd021) = 6;    
+    (*(volatile uint8_t*)0xd018) = 0x1C;
+    (*(volatile uint8_t*)0xd020) = 0;
+    (*(volatile uint8_t*)0xd021) = 6;
     memcpy((void*)SCREEN_RAM, settlers_map, 1000);
-    memset((void*)COLOR_RAM, 1, 1000); 
+    memset((void*)COLOR_RAM, 1, 1000);
+
+    // Initialize settlers array and temp tracking
+    memset(settlers, 0, sizeof(settlers));
+    memset(temp_used, 0, BITMAP_SIZE);
+
+    // Initialize all 10 settlers (spread across the screen)
+    settlers[0].x = 5;  settlers[0].y = 5;
+    settlers[1].x = 15; settlers[1].y = 5;
+    settlers[2].x = 25; settlers[2].y = 5;
+    settlers[3].x = 35; settlers[3].y = 5;
+    settlers[4].x = 10; settlers[4].y = 12;
+    settlers[5].x = 20; settlers[5].y = 12;
+    settlers[6].x = 30; settlers[6].y = 12;
+    settlers[7].x = 5;  settlers[7].y = 20;
+    settlers[8].x = 15; settlers[8].y = 20;
+    settlers[9].x = 25; settlers[9].y = 20;
+
+    // Activate all settlers
+    for (uint8_t i = 0; i < NUM_NPCS; i++) {
+        settlers[i].char_index = 48;
+        settlers[i].color = 1;  // White
+        settlers[i].temp1 = 255;
+        settlers[i].temp2 = 255;
+        settlers[i].active = 1;
+    }
 }
 
 // ============================================================================
@@ -144,23 +233,23 @@ void prepare_temp(uint8_t x, uint8_t y, uint8_t t_idx) {
  * Draw a settler at its current position with smooth movement.
  * This is the core rendering function that creates the illusion of
  * smooth movement by pixel-shifting the sprite across tile boundaries.
- * 
+ *
  * @param s    Pointer to the settler to draw
- * @param t1   First temporary character slot (usually TEMP_A)
- * @param t2   Second temporary character slot (usually TEMP_B)
- * 
+ *
  * The function handles three cases:
  * 1. Horizontal movement - sprite spans two adjacent tiles
  * 2. Vertical movement - sprite spans two stacked tiles
  * 3. Idle/stationary - sprite fits in one tile
  */
-void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
+void draw_settler(Settler* s) {
+    if (!s->active || s->temp1 == 255 || s->temp2 == 255) return;
+
     // Source: the original settler character bitmap
     uint8_t* src = CHARSET_DEST + (s->char_index << 3);
-    
+
     // Destinations: temporary workspace characters
-    uint8_t* dst1 = CHARSET_DEST + (t1 << 3);
-    uint8_t* dst2 = CHARSET_DEST + (t2 << 3);
+    uint8_t* dst1 = CHARSET_DEST + (s->temp1 << 3);
+    uint8_t* dst2 = CHARSET_DEST + (s->temp2 << 3);
 
     // ========================================================================
     // CASE 1: HORIZONTAL MOVEMENT (off_x > 0)
@@ -169,33 +258,33 @@ void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
     // We need to prepare BOTH tiles with their background, then
     // shift the settler's pixels across them.
     if (s->off_x > 0) {
-        prepare_temp(s->x, s->y, t1);          // Left tile
-        prepare_temp(s->x + 1, s->y, t2);      // Right tile
-        
+        prepare_temp(s->x, s->y, s->temp1);          // Left tile
+        prepare_temp(s->x + 1, s->y, s->temp2);      // Right tile
+
         for (uint8_t i = 0; i < 8; i++) {
             // Shift the source row right by (8 - off_x) pixels
             // Using 16-bit register to handle overflow between tiles
             uint16_t row = (uint16_t)src[i] << (8 - s->off_x);
-            
+
             // High byte goes to left tile (pixels shifted out)
             dst1[i] |= (uint8_t)(row >> 8);
-            
+
             // Low byte goes to right tile (remaining pixels)
             dst2[i] |= (uint8_t)(row & 0xFF);
         }
-    } 
+    }
     // ========================================================================
     // CASE 2: VERTICAL MOVEMENT (off_y > 0)
     // ========================================================================
     // The settler is moving down and spans two tiles vertically stacked.
     // We prepare both tiles and shift rows between them.
     else if (s->off_y > 0) {
-        prepare_temp(s->x, s->y, t1);          // Top tile
-        prepare_temp(s->x, s->y + 1, t2);      // Bottom tile
-        
+        prepare_temp(s->x, s->y, s->temp1);          // Top tile
+        prepare_temp(s->x, s->y + 1, s->temp2);      // Bottom tile
+
         for (uint8_t i = 0; i < 8; i++) {
             uint8_t target_y = i + s->off_y;
-            
+
             if (target_y < 8) {
                 // Row still fits in top tile
                 dst1[target_y] |= src[i];
@@ -204,13 +293,13 @@ void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
                 dst2[target_y - 8] |= src[i];
             }
         }
-    } 
+    }
     // ========================================================================
     // CASE 3: IDLE / SNAPPED TO GRID
     // ========================================================================
     // No movement offset - settler fits perfectly in one tile.
     else {
-        prepare_temp(s->x, s->y, t1);
+        prepare_temp(s->x, s->y, s->temp1);
         for (uint8_t i = 0; i < 8; i++) {
             dst1[i] |= src[i];
         }
@@ -252,14 +341,19 @@ void update_settler(Settler* s) {
             // Restore background to vacated tiles
             uint16_t old_off = (s->old_y * 40) + s->old_x;
             SCREEN_RAM[old_off] = settlers_map[old_off];
-            
+            COLOR_RAM[old_off] = 1;  // Restore color to white (background)
+
             // If moving horizontally, also restore the adjacent tile
-            if (s->dir_x != 0) 
+            if (s->dir_x != 0) {
                 SCREEN_RAM[old_off + 1] = settlers_map[old_off + 1];
-            
+                COLOR_RAM[old_off + 1] = 1;
+            }
+
             // If moving vertically, restore the tile below
-            if (s->dir_y != 0) 
+            if (s->dir_y != 0) {
                 SCREEN_RAM[old_off + 40] = settlers_map[old_off + 40];
+                COLOR_RAM[old_off + 40] = 1;
+            }
 
             // Stop moving
             s->dir_x = 0; s->dir_y = 0;
@@ -294,10 +388,62 @@ void start_move(Settler* s, int8_t dx, int8_t dy) {
 // ============================================================================
 
 /**
- * Handle input from keyboard and move settlers.
- * Both settlers move in the same direction when arrow keys are pressed.
+ * Read number key presses (1-9, 0) to select settler.
+ * Maps: 1-9 to settlers 0-8, 0 to settler 9
+ *
+ * Keyboard layout (verified by testing):
+ * Row 7 ($7F): 1(bit0), 2(bit3)
+ * Row 1 ($FD): 3(bit0), 4(bit3)
+ * Row 2 ($FB): 5(bit0), 6(bit3)
+ * Row 3 ($F7): 7(bit0), 8(bit3)
+ * Row 4 ($EF): 9(bit0), 0(bit3)
+ *
+ * Returns settler index 0-9, or 255 if no key pressed
+ */
+uint8_t read_number_key(void) {
+    // Row 7 ($7F): 1, 2
+    (*(volatile uint8_t*)0xDC00) = 0x7F;
+    uint8_t row7 = (*(volatile uint8_t*)0xDC01);
+    if (!(row7 & 0x01)) return 0;  // 1 -> settler 0
+    if (!(row7 & 0x08)) return 1;  // 2 -> settler 1
+
+    // Row 1 ($FD): 3, 4
+    (*(volatile uint8_t*)0xDC00) = 0xFD;
+    uint8_t row1 = (*(volatile uint8_t*)0xDC01);
+    if (!(row1 & 0x01)) return 2;  // 3 -> settler 2
+    if (!(row1 & 0x08)) return 3;  // 4 -> settler 3
+
+    // Row 2 ($FB): 5, 6
+    (*(volatile uint8_t*)0xDC00) = 0xFB;
+    uint8_t row2 = (*(volatile uint8_t*)0xDC01);
+    if (!(row2 & 0x01)) return 4;  // 5 -> settler 4
+    if (!(row2 & 0x08)) return 5;  // 6 -> settler 5
+
+    // Row 3 ($F7): 7, 8
+    (*(volatile uint8_t*)0xDC00) = 0xF7;
+    uint8_t row3 = (*(volatile uint8_t*)0xDC01);
+    if (!(row3 & 0x01)) return 6;  // 7 -> settler 6
+    if (!(row3 & 0x08)) return 7;  // 8 -> settler 7
+
+    // Row 4 ($EF): 9, 0
+    (*(volatile uint8_t*)0xDC00) = 0xEF;
+    uint8_t row4 = (*(volatile uint8_t*)0xDC01);
+    if (!(row4 & 0x01)) return 8;  // 9 -> settler 8
+    if (!(row4 & 0x08)) return 9;  // 0 -> settler 9
+
+    // Reset CIA to prevent interference
+    (*(volatile uint8_t*)0xDC00) = 0xFF;
+
+    return 255;  // No number key pressed
+}
+
+/**
+ * Handle input from keyboard to select and move settlers.
+ * Number keys (1-9, 0) select which settler to control.
+ * Arrow keys move only the selected settler.
  *
  * Key mappings:
+ * - Number keys: Select settler (1=settler0, 2=settler1, ..., 0=settler9)
  * - UP arrow    → Move up (dy = -1)
  * - DEL key     → Move down (used as substitute)
  * - LEFT arrow  → Move left (dx = -1)
@@ -307,7 +453,17 @@ void start_move(Settler* s, int8_t dx, int8_t dy) {
  * - $DC00: Select keyboard row
  * - $DC01: Read column status (0 = key pressed)
  */
-void handle_input(Settler* s1, Settler* s2) {
+void handle_input(void) {
+    // Check for number key to select settler
+    uint8_t num_key = read_number_key();
+    if (num_key != 255 && num_key < NUM_NPCS) {
+        selected_settler = num_key;
+    }
+
+    // Only proceed with movement if selected settler is active
+    if (!settlers[selected_settler].active) {
+        return;
+    }
     int8_t dx = 0, dy = 0;
 
     // Check Row 1 (UP, LEFT, DEL)
@@ -327,12 +483,11 @@ void handle_input(Settler* s1, Settler* s2) {
             dx = 1;
     }
 
-    // Apply movement to both settlers
+    // Apply movement only to the selected settler
     if (dx != 0 || dy != 0) {
-        if (s1->steps_remaining == 0)
-            start_move(s1, dx, dy);
-        if (s2->steps_remaining == 0)
-            start_move(s2, dx, dy);
+        if (settlers[selected_settler].steps_remaining == 0) {
+            start_move(&settlers[selected_settler], dx, dy);
+        }
     }
 }
 
@@ -344,32 +499,53 @@ int main(void) {
     // Initialize hardware and load assets
     init_system();
 
-    // Create two settlers, both white
-    // Settler 1: starts at (10,10)
-    // Settler 2: starts at (20,10)
-    Settler settler1 = {10, 10, 0, 0, 10, 10, 48, 1, 0, 0, 0};
-    Settler settler2 = {20, 10, 0, 0, 20, 10, 48, 1, 0, 0, 0};
+    // Allocate temp characters for active settlers
+    for (uint8_t i = 0; i < NUM_NPCS; i++) {
+        if (settlers[i].active) {
+            allocate_npc_temps(&settlers[i]);
+        }
+    }
 
     // Main game loop
     while (1) {
-        wait_vsync();                         // Sync with screen refresh
-        handle_input(&settler1, &settler2);  // Check keyboard for both
+        wait_vsync();              // Sync with screen refresh
+        handle_input();             // Check keyboard
 
-        // Update both settlers
-        update_settler(&settler1);
-        update_settler(&settler2);
+        // Update all active settlers
+        for (uint8_t i = 0; i < NUM_NPCS; i++) {
+            if (settlers[i].active) {
+                update_settler(&settlers[i]);
+            }
+        }
 
-        // Draw both settlers using separate temp char slots
-        draw_settler(&settler1, TEMP_A, TEMP_B);
-        draw_settler(&settler2, TEMP_C, TEMP_D);
+        // Draw all active settlers
+        for (uint8_t i = 0; i < NUM_NPCS; i++) {
+            if (settlers[i].active) {
+                draw_settler(&settlers[i]);
+            }
+        }
 
-        // Display settler1 coordinates
-        drawInt(settler1.x, 2, 30, 19, 1);
-        drawInt(settler1.y, 2, 30, 20, 1);
+        // Display selected settler number at top
+        drawInt(selected_settler + 1, 1, 0, 0, 1);
 
-        // Display settler2 coordinates
-        drawInt(settler2.x, 2, 35, 19, 1);
-        drawInt(settler2.y, 2, 35, 20, 1);
+        // Display all settlers coordinates (compact, right-aligned)
+        // Row 23: Settlers 1-5 (format: X,Y with 1 space between)
+        for (uint8_t i = 0; i < 5 && i < NUM_NPCS; i++) {
+            if (settlers[i].active) {
+                uint8_t display_x = 2 + (i * 7);  // Start at col 2, 7 chars per settler
+                drawInt(settlers[i].x, 2, display_x, 23, 1);
+                drawInt(settlers[i].y, 2, display_x + 3, 23, 1);
+            }
+        }
+
+        // Row 24: Settlers 6-10 (format: X,Y with 1 space between)
+        for (uint8_t i = 5; i < 10 && i < NUM_NPCS; i++) {
+            if (settlers[i].active) {
+                uint8_t display_x = 2 + ((i - 5) * 7);  // Start at col 2, 7 chars per settler
+                drawInt(settlers[i].x, 2, display_x, 24, 1);
+                drawInt(settlers[i].y, 2, display_x + 3, 24, 1);
+            }
+        }
     }
 
     return 0;
