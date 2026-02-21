@@ -581,29 +581,7 @@ void show_path(void) {
     // Format: (X,Y) (X,Y) etc.
     uint8_t display_x = 3;
     
-    for (int8_t i = path_len - 1; i >= 0; i--) {
-        // Display X coordinate
-        uint8_t x_digit1 = path_x[i] / 10;
-        uint8_t x_digit2 = path_x[i] % 10;
-        
-        if (x_digit1 > 0) {
-            SCREEN_RAM[(1 * 40) + display_x++] = 0x70 + (x_digit1 - 1);
-        }
-        SCREEN_RAM[(1 * 40) + display_x++] = (x_digit2 == 0) ? 0x79 : 0x70 + (x_digit2 - 1);
-        
-        SCREEN_RAM[(1 * 40) + display_x++] = 0x2C;  // ','
-        
-        // Display Y coordinate
-        uint8_t y_digit1 = path_y[i] / 10;
-        uint8_t y_digit2 = path_y[i] % 10;
-        
-        if (y_digit1 > 0) {
-            SCREEN_RAM[(1 * 40) + display_x++] = 0x70 + (y_digit1 - 1);
-        }
-        SCREEN_RAM[(1 * 40) + display_x++] = (y_digit2 == 0) ? 0x79 : 0x70 + (y_digit2 - 1);
-        
-        SCREEN_RAM[(1 * 40) + display_x++] = 0x20;  // space
-    }
+    
 }
 // ============================================================================
 // MAIN PROGRAM
