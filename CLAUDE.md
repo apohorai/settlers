@@ -8,16 +8,16 @@ This is a **Commodore 64 game/application** called "settlers" being developed in
 
 ## Build & Compilation
 
-**Compiler**: LLVM-MOS (mos-clang)
-- Available at: `/usr/local/bin/mos-clang`
+**Compiler**: LLVM-MOS (mos-c64-clang)
+- Available at: `/home/apohorai/llvm-mos/bin/mos-c64-clang`
 - Compiles C++ to 6502 assembly for the Commodore 64
 
-**Build command** (typical):
+**Build command**:
 ```bash
-mos-clang main.cc sprite.cc -o main.prg
+/home/apohorai/llvm-mos/bin/mos-c64-clang -O3 -o main.prg main.cc sprite.cc
 ```
 
-**Output format**: `.prg` file (Commodore 64 executable)
+**Output format**: `.prg` file (Commodore 64 executable, typically 8-10KB)
 
 ## Architecture & Key Components
 
