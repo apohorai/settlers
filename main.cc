@@ -1,5 +1,5 @@
+#include <stdint.h>
 #include <string.h>
-#include <stdlib.h>
 #include "sprite.h"
 #include "charset_data.h"
 #include "map_data.h"
@@ -12,18 +12,10 @@
 #define CHARSET_DEST    ((uint8_t*)0x3000)  // Our custom character set location
 
 // ============================================================================
-// TEMPORARY CHARACTER POOL
+// TEMPORARY CHARACTER SLOTS
 // ============================================================================
-#define TEMP_POOL_START 128  // Start of temp character pool
-#define TEMP_POOL_SIZE  128  // 128 characters (128-255)
-#define MAX_NPCS        20    // Maximum number of NPCs
-
-// Bitmap tracking which temp chars are in use (128 bits = 16 bytes)
-static uint8_t temp_used[16];  // 16 bytes * 8 bits = 128 bits
-
-// Current allocations for NPCs
-static uint8_t npc_temp1[MAX_NPCS];  // First temp char for each NPC
-static uint8_t npc_temp2[MAX_NPCS];  // Second temp char for each NPC
+#define TEMP_A    254 // $FE - First temp character for sprite drawing
+#define TEMP_B    255 // $FF - Second temp character (for smooth movement)
 
 // ============================================================================
 // SETTLER STRUCTURE
@@ -45,141 +37,27 @@ typedef struct {
     // Movement state
     int8_t  dir_x, dir_y;     // Direction vector (-1,0,1)
     uint8_t steps_remaining;   // 8 = moving, 0 = stationary
-    
-    // NPC ID for temp character lookup
-    uint8_t npc_id;
 } Settler;
 
-// ============================================================================
-// TEMPORARY CHARACTER ALLOCATOR FUNCTIONS
-// ============================================================================
-
-/**
- * Initialize the temp character allocator
- * Call once at startup
- */
-void init_temp_allocator() {
-    // Clear the bitmap (all chars free)
-    memset(temp_used, 0, 16);
-    
-    // Initialize NPC allocations to 0 (unused)
-    memset(npc_temp1, 0, MAX_NPCS);
-    memset(npc_temp2, 0, MAX_NPCS);
-}
-
-/**
- * Allocate a temporary character
- * Returns: character index (128-255) or 0 if none available
- */
-uint8_t allocate_temp() {
-    // Scan bitmap for a free slot
-    for (uint8_t byte = 0; byte < 16; byte++) {
-        if (temp_used[byte] != 0xFF) {  // If byte has a free bit
-            // Find first free bit in this byte
-            for (uint8_t bit = 0; bit < 8; bit++) {
-                if (!(temp_used[byte] & (1 << bit))) {
-                    // Mark as used
-                    temp_used[byte] |= (1 << bit);
-                    // Return character index
-                    return TEMP_POOL_START + (byte * 8) + bit;
-                }
-            }
-        }
-    }
-    return 0;  // No free temp chars
-}
-
-/**
- * Release a temporary character back to the pool
- * @param c Character index to release (128-255)
- */
-void release_temp(uint8_t c) {
-    if (c < TEMP_POOL_START || c >= TEMP_POOL_START + TEMP_POOL_SIZE) 
-        return;
-    
-    uint8_t index = c - TEMP_POOL_START;
-    uint8_t byte = index / 8;
-    uint8_t bit = index % 8;
-    
-    // Clear the bit (mark as free)
-    temp_used[byte] &= ~(1 << bit);
-    
-    // Clear the character bitmap to prevent garbage
-    memset(CHARSET_DEST + (c << 3), 0, 8);
-}
-
-/**
- * Allocate temp chars for an NPC
- * @param npc_id NPC index (0-19)
- * @return 1 if successful, 0 if failed
- */
-uint8_t allocate_npc_temps(uint8_t npc_id) {
-    if (npc_id >= MAX_NPCS) return 0;
-    
-    // If NPC already has temps, release them first
-    if (npc_temp1[npc_id] != 0) 
-        release_temp(npc_temp1[npc_id]);
-    if (npc_temp2[npc_id] != 0) 
-        release_temp(npc_temp2[npc_id]);
-    
-    // Allocate two new temp chars
-    npc_temp1[npc_id] = allocate_temp();
-    npc_temp2[npc_id] = allocate_temp();
-    
-    // Check if both allocations succeeded
-    if (npc_temp1[npc_id] == 0 || npc_temp2[npc_id] == 0) {
-        // If either failed, release any that succeeded
-        if (npc_temp1[npc_id] != 0) release_temp(npc_temp1[npc_id]);
-        if (npc_temp2[npc_id] != 0) release_temp(npc_temp2[npc_id]);
-        npc_temp1[npc_id] = 0;
-        npc_temp2[npc_id] = 0;
-        return 0;
-    }
-    
-    return 1;
-}
-
-/**
- * Release both temp chars for an NPC
- */
-void release_npc_temps(uint8_t npc_id) {
-    if (npc_id >= MAX_NPCS) return;
-    
-    if (npc_temp1[npc_id] != 0) {
-        release_temp(npc_temp1[npc_id]);
-        npc_temp1[npc_id] = 0;
-    }
-    if (npc_temp2[npc_id] != 0) {
-        release_temp(npc_temp2[npc_id]);
-        npc_temp2[npc_id] = 0;
-    }
-}
-
-/**
- * Get NPC's temp chars for drawing
- */
-void get_npc_temps(uint8_t npc_id, uint8_t* t1, uint8_t* t2) {
-    if (npc_id >= MAX_NPCS) {
-        *t1 = 0;
-        *t2 = 0;
-        return;
-    }
-    *t1 = npc_temp1[npc_id];
-    *t2 = npc_temp2[npc_id];
-}
 
 // ============================================================================
-// DRAW INTEGER FUNCTION
+// draw_int_fixed - Display integer with fixed width (leading zeros)
+// 
+// Parameters:
+//   value: The number to display (0-65535)
+//   width: Number of digits to show (1-5)
+//   x: Screen column (0-39)
+//   y: Screen row (0-24)
+//   color: C64 color value (0-15)
 // ============================================================================
-
-/**
- * Draw integer with fixed width (leading zeros)
- */
 void drawInt(uint16_t value, uint8_t width, uint8_t x, uint8_t y, uint8_t color) {
     uint8_t digits[5];
     uint16_t temp = value;
     uint16_t offset;
     
+    // ============================================================
+    // STEP 1: Extract digits from the number
+    // ============================================================
     for (uint8_t i = 0; i < width; i++) {
         uint8_t digit = temp % 10;
         if (digit == 0) {
@@ -190,6 +68,9 @@ void drawInt(uint16_t value, uint8_t width, uint8_t x, uint8_t y, uint8_t color)
         temp = temp / 10;
     }
     
+    // ============================================================
+    // STEP 2: Display all digits
+    // ============================================================
     for (uint8_t i = 0; i < width; i++) {
         offset = (y * 40) + x + i;
         SCREEN_RAM[offset] = digits[i];
@@ -201,11 +82,26 @@ void drawInt(uint16_t value, uint8_t width, uint8_t x, uint8_t y, uint8_t color)
 // SYSTEM FUNCTIONS
 // ============================================================================
 
+/**
+ * Wait for vertical blanking period.
+ * Ensures smooth animation by syncing with screen refresh.
+ * First waits for bit 7 of $d011 to be 0 (not in VBLANK),
+ * then waits for raster line $FF (last line).
+ */
 void wait_vsync() {
     while ((*(volatile uint8_t*)0xd011) & 0x80); 
     while ((*(volatile uint8_t*)0xd012) != 0xFF);
 }
 
+/**
+ * Initialize the C64 hardware and load our custom assets.
+ * Steps:
+ * 1. Copy custom character set to $3000 (2048 bytes)
+ * 2. Set VIC-II to use our charset ($d018 = $1C = charset at $3000)
+ * 3. Set border black ($d020 = 0) and background blue ($d021 = 6)
+ * 4. Copy map data to screen memory
+ * 5. Initialize all colors to white (1)
+ */
 void init_system() {
     memcpy(CHARSET_DEST, settlers_charset, 2048);
     (*(volatile uint8_t*)0xd018) = 0x1C; 
@@ -219,6 +115,18 @@ void init_system() {
 // RENDERING HELPERS
 // ============================================================================
 
+/**
+ * Prepare a temporary character slot with a clean background tile.
+ * This preserves the original map tile while we draw on top of it.
+ * 
+ * @param x,y     Tile coordinates to prepare
+ * @param t_idx   Temporary character index (TEMP_A or TEMP_B)
+ * 
+ * Steps:
+ * 1. Get the original map tile character at this position
+ * 2. Copy its 8-byte bitmap to the temporary character slot
+ * 3. Redirect the screen to show the temporary character
+ */
 void prepare_temp(uint8_t x, uint8_t y, uint8_t t_idx) {
     if (x >= 40 || y >= 25) return;
     uint8_t bg_char = settlers_map[(y * 40) + x];
@@ -230,34 +138,75 @@ void prepare_temp(uint8_t x, uint8_t y, uint8_t t_idx) {
 // MAIN DRAWING ENGINE
 // ============================================================================
 
+/**
+ * Draw a settler at its current position with smooth movement.
+ * This is the core rendering function that creates the illusion of
+ * smooth movement by pixel-shifting the sprite across tile boundaries.
+ * 
+ * @param s    Pointer to the settler to draw
+ * @param t1   First temporary character slot (usually TEMP_A)
+ * @param t2   Second temporary character slot (usually TEMP_B)
+ * 
+ * The function handles three cases:
+ * 1. Horizontal movement - sprite spans two adjacent tiles
+ * 2. Vertical movement - sprite spans two stacked tiles
+ * 3. Idle/stationary - sprite fits in one tile
+ */
 void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
+    // Source: the original settler character bitmap
     uint8_t* src = CHARSET_DEST + (s->char_index << 3);
+    
+    // Destinations: temporary workspace characters
     uint8_t* dst1 = CHARSET_DEST + (t1 << 3);
     uint8_t* dst2 = CHARSET_DEST + (t2 << 3);
 
+    // ========================================================================
+    // CASE 1: HORIZONTAL MOVEMENT (off_x > 0)
+    // ========================================================================
+    // The settler is moving right and spans two tiles side-by-side.
+    // We need to prepare BOTH tiles with their background, then
+    // shift the settler's pixels across them.
     if (s->off_x > 0) {
-        prepare_temp(s->x, s->y, t1);
-        prepare_temp(s->x + 1, s->y, t2);
+        prepare_temp(s->x, s->y, t1);          // Left tile
+        prepare_temp(s->x + 1, s->y, t2);      // Right tile
         
         for (uint8_t i = 0; i < 8; i++) {
+            // Shift the source row right by (8 - off_x) pixels
+            // Using 16-bit register to handle overflow between tiles
             uint16_t row = (uint16_t)src[i] << (8 - s->off_x);
+            
+            // High byte goes to left tile (pixels shifted out)
             dst1[i] |= (uint8_t)(row >> 8);
+            
+            // Low byte goes to right tile (remaining pixels)
             dst2[i] |= (uint8_t)(row & 0xFF);
         }
     } 
+    // ========================================================================
+    // CASE 2: VERTICAL MOVEMENT (off_y > 0)
+    // ========================================================================
+    // The settler is moving down and spans two tiles vertically stacked.
+    // We prepare both tiles and shift rows between them.
     else if (s->off_y > 0) {
-        prepare_temp(s->x, s->y, t1);
-        prepare_temp(s->x, s->y + 1, t2);
+        prepare_temp(s->x, s->y, t1);          // Top tile
+        prepare_temp(s->x, s->y + 1, t2);      // Bottom tile
         
         for (uint8_t i = 0; i < 8; i++) {
             uint8_t target_y = i + s->off_y;
+            
             if (target_y < 8) {
+                // Row still fits in top tile
                 dst1[target_y] |= src[i];
             } else {
+                // Row has moved into bottom tile
                 dst2[target_y - 8] |= src[i];
             }
         }
     } 
+    // ========================================================================
+    // CASE 3: IDLE / SNAPPED TO GRID
+    // ========================================================================
+    // No movement offset - settler fits perfectly in one tile.
     else {
         prepare_temp(s->x, s->y, t1);
         for (uint8_t i = 0; i < 8; i++) {
@@ -265,6 +214,7 @@ void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
         }
     }
     
+    // Set the color for this tile (color RAM is not affected by pixel shifting)
     COLOR_RAM[(s->y * 40) + s->x] = s->color;
 }
 
@@ -272,26 +222,44 @@ void draw_settler(Settler* s, uint8_t t1, uint8_t t2) {
 // MOVEMENT UPDATE
 // ============================================================================
 
+/**
+ * Update settler position during smooth movement.
+ * Called once per frame to advance the animation.
+ * 
+ * @param s    Pointer to the settler to update
+ * 
+ * This function:
+ * 1. Calculates new pixel position based on current direction
+ * 2. Updates tile coordinates and sub-pixel offsets
+ * 3. When movement completes, restores background tiles
+ */
 void update_settler(Settler* s) {
     if (s->steps_remaining > 0) {
+        // Calculate new pixel position (0-319, 0-199)
         int16_t px = (s->x * 8) + s->off_x + s->dir_x;
         int16_t py = (s->y * 8) + s->off_y + s->dir_y;
 
+        // Update tile position and sub-pixel offset
         s->x = px / 8;     s->off_x = px % 8;
         s->y = py / 8;     s->off_y = py % 8;
 
         s->steps_remaining--;
 
+        // If movement complete, clean up
         if (s->steps_remaining == 0) {
+            // Restore background to vacated tiles
             uint16_t old_off = (s->old_y * 40) + s->old_x;
             SCREEN_RAM[old_off] = settlers_map[old_off];
             
+            // If moving horizontally, also restore the adjacent tile
             if (s->dir_x != 0) 
                 SCREEN_RAM[old_off + 1] = settlers_map[old_off + 1];
             
+            // If moving vertically, restore the tile below
             if (s->dir_y != 0) 
                 SCREEN_RAM[old_off + 40] = settlers_map[old_off + 40];
 
+            // Stop moving
             s->dir_x = 0; s->dir_y = 0;
         }
     }
@@ -301,6 +269,16 @@ void update_settler(Settler* s) {
 // MOVEMENT INITIATION
 // ============================================================================
 
+/**
+ * Start a new movement for a settler.
+ * 
+ * @param s    Pointer to the settler
+ * @param dx   X direction (-1, 0, 1)
+ * @param dy   Y direction (-1, 0, 1)
+ * 
+ * Only starts if not already moving. Each tile move takes 8 steps
+ * for smooth pixel-by-pixel animation.
+ */
 void start_move(Settler* s, int8_t dx, int8_t dy) {
     if (s->steps_remaining == 0) { 
         s->old_x = s->x; s->old_y = s->y;
@@ -310,48 +288,42 @@ void start_move(Settler* s, int8_t dx, int8_t dy) {
 }
 
 // ============================================================================
-// INPUT HANDLING - Modified to work with array of NPCs
+// INPUT HANDLING
 // ============================================================================
 
-void handle_input(Settler* npcs, uint8_t count) {
-    // Check if any NPC can move
-    uint8_t can_move = 0;
-    for (uint8_t i = 0; i < count; i++) {
-        if (npcs[i].steps_remaining == 0) {
-            can_move = 1;
-            break;
-        }
-    }
-    if (!can_move) return;
+/**
+ * Read C64 keyboard and control the settler with cursor keys.
+ * 
+ * @param s    Pointer to the player-controlled settler
+ * 
+ * Key mappings:
+ * - UP arrow    → Move up (dy = -1)
+ * - DEL key     → Move down (used as substitute)
+ * - LEFT arrow  → Move left (dx = -1)
+ * - RIGHT arrow → Move right (dx = 1)
+ * 
+ * Uses CIA #1 registers:
+ * - $DC00: Select keyboard row
+ * - $DC01: Read column status (0 = key pressed)
+ */
+void handle_input(Settler* s) {
+    if (s->steps_remaining > 0) return; 
     
+    // Check Row 1 (UP, LEFT, DEL)
     (*(volatile uint8_t*)0xDC00) = 0xFD; 
     uint8_t row1 = (*(volatile uint8_t*)0xDC01);
     
-    int8_t dx = 0, dy = 0;
-    
-    if (!(row1 & 0x02)) {          // UP arrow
-        dy = -1;
-    }
-    else if (!(row1 & 0x20)) {     // DOWN (DEL key)
-        dy = 1;
-    }
-    else if (!(row1 & 0x04)) {     // LEFT arrow
-        dx = -1;
-    }
+    if (!(row1 & 0x02))           // UP arrow (bit 1)
+        start_move(s, 0, -1);
+    else if (!(row1 & 0x20))      // DEL key used as DOWN (bit 5)
+        start_move(s, 0, 1);
+    else if (!(row1 & 0x04))      // LEFT arrow (bit 2)
+        start_move(s, -1, 0);
     else {
+        // Check Row 2 for RIGHT arrow
         (*(volatile uint8_t*)0xDC00) = 0xFB; 
-        if (!((*(volatile uint8_t*)0xDC01) & 0x04)) {  // RIGHT arrow
-            dx = 1;
-        }
-    }
-    
-    // Apply movement to all NPCs that aren't moving
-    if (dx != 0 || dy != 0) {
-        for (uint8_t i = 0; i < count; i++) {
-            if (npcs[i].steps_remaining == 0) {
-                start_move(&npcs[i], dx, dy);
-            }
-        }
+        if (!((*(volatile uint8_t*)0xDC01) & 0x04))  // RIGHT arrow (bit 2)
+            start_move(s, 1, 0);
     }
 }
 
@@ -359,73 +331,22 @@ void handle_input(Settler* npcs, uint8_t count) {
 // MAIN PROGRAM
 // ============================================================================
 
-#define NUM_NPCS 2
-
 int main(void) {
     // Initialize hardware and load assets
     init_system();
-    init_temp_allocator();
     
-    // Create array of NPCs
-    Settler npcs[NUM_NPCS];
-    
-    // NPC 0 at (10,10)
-    npcs[0].x = 10; npcs[0].y = 10;
-    npcs[0].off_x = 0; npcs[0].off_y = 0;
-    npcs[0].old_x = 10; npcs[0].old_y = 10;
-    npcs[0].char_index = 48;
-    npcs[0].color = 1;
-    npcs[0].dir_x = 0; npcs[0].dir_y = 0;
-    npcs[0].steps_remaining = 0;
-    npcs[0].npc_id = 0;
-    
-    // NPC 1 at (15,10)
-    npcs[1].x = 15; npcs[1].y = 10;
-    npcs[1].off_x = 0; npcs[1].off_y = 0;
-    npcs[1].old_x = 15; npcs[1].old_y = 10;
-    npcs[1].char_index = 48;
-    npcs[1].color = 1;
-    npcs[1].dir_x = 0; npcs[1].dir_y = 0;
-    npcs[1].steps_remaining = 0;
-    npcs[1].npc_id = 1;
-    
-    // Allocate temp chars for all NPCs
-    for (uint8_t i = 0; i < NUM_NPCS; i++) {
-        allocate_npc_temps(i);
-    }
-    
-    uint8_t t1, t2;
+    // Create a player-controlled settler at (10,10)
+    // Using character 48 from charset, white color (1)
+    Settler npc = {10, 10, 0, 0, 10, 10, 48, 1, 0, 0, 0}; 
     
     // Main game loop
     while (1) {
-        wait_vsync();
-        
-        // Handle input for all NPCs
-        handle_input(npcs, NUM_NPCS);
-        
-        // Update all NPCs
-        for (uint8_t i = 0; i < NUM_NPCS; i++) {
-            update_settler(&npcs[i]);
-        }
-        
-        // Draw all NPCs
-        for (uint8_t i = 0; i < NUM_NPCS; i++) {
-            get_npc_temps(npcs[i].npc_id, &t1, &t2);
-            if (t1 != 0 && t2 != 0) {
-                draw_settler(&npcs[i], t1, t2);
-            }
-        }
-        
-        // Draw coordinates for debugging
-        drawInt(npcs[0].x, 2, 30, 19, 1); 
-        drawInt(npcs[0].y, 2, 30, 20, 1);
-        drawInt(npcs[1].x, 2, 35, 19, 1); 
-        drawInt(npcs[1].y, 2, 35, 20, 1);
-    }
-    
-    // Cleanup (never reached in infinite loop)
-    for (uint8_t i = 0; i < NUM_NPCS; i++) {
-        release_npc_temps(i);
+        wait_vsync();                    // Sync with screen refresh
+        handle_input(&npc);              // Check keyboard
+        update_settler(&npc);            // Update position if moving
+        draw_settler(&npc, TEMP_A, TEMP_B);  // Draw at current position
+        drawInt(npc.x, 2, 30, 19, 1); 
+        drawInt(npc.y, 2, 30, 20, 1);  
     }
     
     return 0;
