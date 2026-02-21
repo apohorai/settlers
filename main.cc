@@ -7,10 +7,9 @@
 // ============================================================================
 // HARDWARE ADDRESSES
 // ============================================================================
-#define SCREEN_RAM      ((uint8_t*)0x0400)  // VIC-II screen memory (40x25)
-#define COLOR_RAM       ((uint8_t*)0xD800)  // VIC-II color memory
-#define CHARSET_DEST    ((uint8_t*)0x3000)  // Our custom character set location
-
+#define SCREEN_RAM      ((uint8_t*)0x4400)  // Moved to VIC-II Bank 1 (offset $0400)
+#define COLOR_RAM       ((uint8_t*)0xD800)  // VIC-II color memory (Unchanged)
+#define CHARSET_DEST    ((uint8_t*)0x6000)  // Our custom character set location
 // ============================================================================
 // SETTLER CONFIGURATION
 // ============================================================================
@@ -127,13 +126,25 @@ void wait_vsync() {
  * 6. Initialize settler array and temp char tracking
  */
 void init_system() {
+    // 1. Switch VIC-II to Bank 1 ($4000 - $7FFF)
+    // Bits 0-1 of $DD00 control the bank (inverted). %10 = Bank 1.
+    (*(volatile uint8_t*)0xdd00) = ((*(volatile uint8_t*)0xdd00) & 0xFC) | 0x02;
+
+    // 2. Copy the charset to $6000
     memcpy(CHARSET_DEST, settlers_charset, 2048);
-    (*(volatile uint8_t*)0xd018) = 0x1C;
+
+    // 3. Set VIC-II memory pointers for Bank 1
+    // Screen offset: $0400 (bits 4-7 = %0001 -> 0x10)
+    // Charset offset: $6000 is $2000 bytes into Bank 1 (bits 1-3 = %100 -> 0x08)
+    // Combine them: 0x10 | 0x08 = 0x18
+    (*(volatile uint8_t*)0xd018) = 0x18;
+    
     (*(volatile uint8_t*)0xd020) = 0;
     (*(volatile uint8_t*)0xd021) = 6;
+    
+    // The rest of your map copying and array initialization logic remains identical!
     memcpy((void*)SCREEN_RAM, settlers_map, 1000);
     memset((void*)COLOR_RAM, 1, 1000);
-
     // Initialize settlers array and temp tracking
     memset(settlers, 0, sizeof(settlers));
 
